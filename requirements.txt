@@ -1,0 +1,12 @@
+pandas
+numpy
+matplotlib
+seaborn
+scipy
+scikit-learn
+imbalanced-learn
+statsmodels
+pmdarima
+jupyter
+ipykernel
+pyarrow

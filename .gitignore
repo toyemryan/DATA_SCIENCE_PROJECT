@@ -1,0 +1,31 @@
+﻿# Ambiente virtuale
+.venv/
+
+# Dati: troppo pesanti per GitHub (fonte indicata nel README di ogni progetto)
+**/data/raw/
+**/data/processed/
+
+# Python / Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Editor / sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+struttura.txt
+
+# LaTeX: file generati dalla compilazione
+*.aux
+*.log
+*.toc
+*.lof
+*.lot
+*.out
+*.bbl
+*.blg
+*.synctex.gz
+*.fls
+*.fdb_latexmk

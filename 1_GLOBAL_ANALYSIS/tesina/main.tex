@@ -1,0 +1,976 @@
+\documentclass[11pt]{report}
+
+% ==================== Lingua e caratteri ====================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[italian]{babel}
+\DeclareUnicodeCharacter{03BC}{\textmu}   % carattere μ (micro)
+\DeclareUnicodeCharacter{00B5}{\textmu}   % carattere µ (micro)
+
+% ==================== Titoli dei capitoli ====================
+\usepackage{titlesec}
+\titleformat{\chapter}
+  {\normalfont\LARGE\bfseries}{\thechapter}{1em}{}
+\titlespacing*{\chapter}{0pt}{3.5ex plus 1ex minus .2ex}{2.3ex plus .2ex}
+
+% ==================== Impaginazione e pacchetti ====================
+\usepackage{tabularx}
+\usepackage[margin=1.2in]{geometry}
+\usepackage[toc,page]{appendix}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{tikz}
+\usepackage{forest}
+\usetikzlibrary{trees, shapes.geometric, arrows.meta, positioning}
+\usepackage{verbatim}
+\usepackage{listings}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{xcolor}
+\usepackage{booktabs}     % \toprule, \midrule, \bottomrule
+\usepackage{siunitx}      % \SI, \num, unità di misura
+\sisetup{output-decimal-marker={,}, group-separator={.}, group-minimum-digits=4, per-mode=symbol}
+\usepackage{url}
+
+% ==================== Cartelle delle immagini ====================
+\graphicspath{{images/}{../1_DATA_ANALYSIS/figures/}{../2_CLASSIFICATION/figures/}%
+              {../3_CLUSTERING/figures/}{../4_FORECASTING/figures/}}
+
+% ==================== Comandi del progetto ====================
+% Unità di misura delle concentrazioni
+\newcommand{\ugm}{\si{\micro\gram\per\cubic\metre}}
+\newcommand{\mgm}{\si{\milli\gram\per\cubic\metre}}
+% Promemoria in rosso (da eliminare prima della consegna)
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[DA FARE:} #1\textbf{]}}}
+% Figura con riquadro rosso se l'immagine non esiste ancora
+\newcommand{\figura}[3]{%
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{../1_DATA_ANALYSIS/figures/#1}{\includegraphics[width=0.9\textwidth]{#1}}{%
+      \fbox{\parbox[c][4cm][c]{0.8\textwidth}{\centering\textcolor{red}{Figura mancante: \texttt{\detokenize{#1}}}}}}
+    \caption{#2}
+    \label{#3}
+  \end{figure}}
+
+% ==================== Stili per il codice ====================
+\lstset{
+    basicstyle=\ttfamily\normalsize,
+    breaklines=true,
+    moredelim=[is][\color{red}\itshape]{|R|}{|R|}
+}
+\definecolor{custom_green}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{custom_blue}{rgb}{0.05, 0.05, 0.97}
+\definecolor{custom_brown}{rgb}{0.69, 0.38, 0.10}
+\definecolor{custom_purple}{rgb}{0.58, 0.00, 0.82}
+\definecolor{custom_orange}{rgb}{0.94, 0.59, 0.09}
+
+\lstdefinelanguage{Python}{
+    keywords={from, import, def, return, as, in, len, if, elif, else, for, while},
+    breakatwhitespace=false,
+    breaklines=true,
+    morecomment=[l]{\#},
+    morestring=[b]",
+    commentstyle=\color{red},
+    keywordstyle=\color{custom_purple},
+    stringstyle=\color{custom_green},
+    basicstyle=\ttfamily\footnotesize,
+    captionpos=b,
+    showstringspaces=false,
+    showtabs=false,
+    numbers=left,
+    numbersep=5pt,
+    numberstyle=\tiny\color{black},
+    rulecolor=\color{black},
+    tabsize=5,
+    title=\lstname,
+}
+
+% ============================================================
+\begin{document}
+\captionsetup[figure]{margin=1.5cm,font=small,labelfont={bf},name={Figura},labelsep=colon,textfont={it}}
+\captionsetup[table]{margin=1.5cm,font=small,labelfont={bf},name={Tabella},labelsep=colon,textfont={it}}
+
+% -------------------- Frontespizio --------------------
+\begin{titlepage}
+  \begin{center}
+    \LARGE {\scshape{Università Politecnica delle Marche}}\\[0.5cm]
+    \LARGE {\scshape{Ingegneria Informatica e dell'Automazione}}\\[0.7cm]
+    \linespread{1}
+    \huge {\bfseries Tecniche di Data Science per l'Analisi della Qualità dell'aria in Campania}\\[1cm]
+    \linespread{1}
+    \includegraphics[width=5cm]{images/logoUnivpm.jpg}\\[0.5cm]
+    \linespread{1.2}
+    \Large Corso di\\
+    \Large {\scshape{DATA SCIENCE}} \\[0.3cm]
+    \Large {Anno accademico 2026-2027 \\[0.8cm]}
+    {\Large Studenti:}
+    \hfill {\Large Professore:}\\
+    {\Large TOYEM TEZEM RYAN PARFAIT}
+    \hfill
+    {\Large DOMENICO URSINO}\\
+    \raggedright{\Large SIMONE MURAZZO}\\
+    {\Large ANDREA SCALZI}
+    \hfill {\Large Dottorando:}\\
+    \raggedright{{\Large MAICOL LANNI}}
+    \hfill {\Large BURATTI CHRISTOPHER}\\
+
+    \paragraph{}
+    \centering{
+      \includegraphics[width=2cm]{images/dii_new.png}\\[0.3cm]
+      \large Dipartimento di Ingegneria dell'Informazione\\[0.3cm]
+    }
+  \end{center}
+\end{titlepage}
+
+\pagenumbering{arabic}
+\tableofcontents
+\newpage
+\pagestyle{plain}
+
+% -------------------- Capitoli --------------------
+% ============================================================
+%  CAPITOLO 1 - INTRODUZIONE E DATASET
+%  Metriche ottenute nel notebook 1_DATA_ANALYSIS/codice/00_preprocessing.ipynb
+% ============================================================
+\chapter{Introduzione e dataset}
+\label{cap:dataset}
+
+% ------------------------------------------------------------
+\section{Contesto e obiettivi del progetto}
+\label{sec:obiettivi}
+
+L'inquinamento atmosferico è uno dei principali rischi ambientali per la salute
+umana. Le particelle sospese e i gas inquinanti, come il biossido di azoto
+\(NO_{2}\) e l'ozono (\(O_{3}\)), sono associati a malattie respiratorie e
+cardiovascolari, e la loro concentrazione nell'aria è per questo regolata da
+limiti di legge a livello europeo. L'Italia è uno dei Paesi in cui questi
+limiti vengono superati con maggiore frequenza: nel 2020 la Corte di giustizia
+dell'Unione europea l'ha condannata per il superamento sistematico e continuato
+dei valori limite del PM10 in diverse zone del territorio \cite{cgue}. Il
+monitoraggio della qualità dell'aria è affidato alle Agenzie regionali per la
+protezione ambientale (ARPA), che gestiscono reti di stazioni di misura
+distribuite sul territorio.
+
+In questo progetto analizziamo le misure orarie della rete di monitoraggio
+della Regione Campania, gestita da ARPA Campania (ARPAC), con l'obiettivo di
+estrarre conoscenza da dati reali e recenti attraverso le tecniche viste nel
+corso. Il lavoro si articola in quattro parti:
+\begin{itemize}
+  \item \textbf{Analisi descrittiva:} esplorare le distribuzioni degli
+        inquinanti, il loro andamento nel tempo, le differenze tra stazioni e le relazioni tra inquinanti;
+  \item \textbf{Classificazione:} DA FARE;
+  \item \textbf{Clustering:} DA FARE;
+  \item \textbf{Forecasting:} DA FARE.
+\end{itemize}
+
+Questo primo capitolo presenta il dataset, la sua struttura e le operazioni di
+pre-processing che hanno permesso di ottenere i dati puliti utilizzati in tutti
+i capitoli successivi.
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/ARPAC STAZIONE.jpg}
+    \caption{Esempio di stazione di monitoraggio.}
+    \label{fig:arpac_stazione}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Il dataset}
+\label{sec:arpac}
+
+I dati provengono dal portale Open Data di ARPA Campania \cite{arpac}, che
+pubblica mensilmente le misure orarie di tutte le stazioni della rete regionale
+di monitoraggio della qualità dell'aria. Abbiamo scelto questa fonte perché
+offre dati reali, recenti e pubblicati da un ente istituzionale, con una
+frequenza di misura (oraria) e una durata (oltre tre anni) adatte sia
+all'analisi delle serie temporali sia alle tecniche di classificazione e di
+clustering.
+
+Il portale mette a disposizione due versioni dei dati: i dati \emph{grezzi}
+(\emph{near real time}), pubblicati quasi in tempo reale, e i dati
+\emph{validati}, sottoposti ai controlli di qualità dell'agenzia.
+Abbiamo scelto i dati validati, più affidabili, tenendo conto di
+qualche lacune nella valutazione della continuità dei dati
+(Sezione~\ref{sec:continuita}).
+
+I 44 file mensili, da marzo 2023 a ottobre 2026, sono stati scaricati il
+29/10/2026 e concatenati in un unico file. La Tabella~\ref{tab:arpac} ne
+riassume le caratteristiche.
+
+\begin{table}[H]
+  \centering
+  \caption{Caratteristiche del dataset utilizzato.}
+  \label{tab:arpac}
+  \begin{tabular}{ll}
+    \toprule
+    Fonte              & Portale Open Data ARPA Campania \cite{arpac}                             \\
+    Dataset            & \emph{Dati RQA Orari Validati}                                           \\
+    Licenza            & CC BY 4.0                                                                \\
+    Periodo            & 20/03/2023 -- 26/10/2026                                                 \\
+    File               & 44 file mensili CSV, concatenati in un unico file (\SI{395}{\mega\byte}) \\
+    Data del download  & 29/10/2026                                                               \\
+    Righe              & \num{4905168}                                                            \\
+    Codici di stazione & 57                                                                       \\
+    Inquinanti         & 7                                                                        \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% ------------------------------------------------------------
+\section{Struttura dei dati}
+\label{sec:struttura}
+
+I dati sono organizzati in formato \emph{lungo}: ogni riga corrisponde alla
+misura di un inquinante, in una stazione, in una determinata ora. La
+Tabella~\ref{tab:colonne} descrive le sette colonne del file.
+
+\begin{table}[H]
+  \centering
+  \caption{Colonne del dataset originale.}
+  \label{tab:colonne}
+  \begin{tabularx}{\textwidth}{l l >{\raggedright\arraybackslash}X l}
+    \toprule
+    \textbf{Colonna}     & \textbf{Tipo} & \textbf{Descrizione}                   & \textbf{Esempio}           \\
+    \midrule
+    \texttt{\_id}        & intero        & numero di riga interno al file mensile & 1                          \\
+    \texttt{Stazione}    & testo         & codice europeo (EEA) della stazione    & IT2211A                    \\
+    \texttt{Descrizione} & testo         & nome della stazione                    & Acerra Zona Industriale    \\
+    \texttt{Inquinante}  & testo         & inquinante misurato                    & PM10                       \\
+    \texttt{Data\_ora}   & testo         & data, ora e fuso orario                & 01-09-2023 00:00:00 +01:00 \\
+    \texttt{Valore}      & testo         & concentrazione misurata                & 27.1                       \\
+    \texttt{Um}          & testo         & unità di misura                        & \ugm                       \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Il codice della stazione segue la nomenclatura dell'Agenzia europea
+dell'ambiente (EEA): le stazioni fisse della rete hanno codici della forma
+\texttt{IT}, seguito da quattro cifre e dalla lettera \texttt{A}. Il nome della
+stazione indica in genere il comune e il luogo di installazione (una scuola, un
+parco, una zona industriale).
+
+\subsection{Gli inquinanti}
+
+Il dataset contiene le misure di sette inquinanti:
+\begin{itemize}
+  \item \textbf{PM10 e PM2,5}: particelle sospese con diametro inferiore
+        rispettivamente a \SI{10}{\micro\metre} e a \SI{2,5}{\micro\metre}.
+        \textbf{Derivano dal traffico} (gas di scarico, ma anche usura di freni,
+        pneumatici e asfalto), dal riscaldamento domestico, dall'industria e
+        da fonti naturali come la sabbia sahariana. Le PM2,5, più fini,
+        penetrano più in profondità nell'apparato respiratorio;
+  \item \textbf{NO\textsubscript{2}} (biossido di azoto): gas prodotto dai
+        processi di combustione, in ambito urbano soprattutto dal traffico
+        veicolare;
+  \item \textbf{O\textsubscript{3}} (ozono): inquinante \emph{secondario}, non
+        emesso direttamente ma formato in atmosfera per effetto della radiazione
+        solare a partire da altri inquinanti; raggiunge per questo i valori più
+        alti in estate;
+  \item \textbf{CO} (monossido di carbonio): gas prodotto dalla combustione
+        incompleta, in particolare dei motori dei veicoli;
+  \item \textbf{SO\textsubscript{2}} (biossido di zolfo): gas legato alla
+        combustione di combustibili contenenti zolfo, in ambito industriale e
+        portuale;
+  \item \textbf{C\textsubscript{6}H\textsubscript{6}} (benzene): composto
+        organico cancerogeno, emesso principalmente dai carburanti e dal
+        traffico.
+\end{itemize}
+
+\subsection{I valori limite}
+
+La Direttiva 2008/50/CE \cite{direttiva}, recepita in Italia dal D.Lgs.\
+155/2010, fissa per ogni inquinante dei \emph{valori limite}: una
+concentrazione da non superare, calcolata come media su un determinato
+\emph{periodo di mediazione} (un'ora, un giorno, otto ore o un anno). Per
+alcuni limiti è consentito un numero massimo di superamenti per anno civile: ad
+esempio, la media giornaliera del PM10 può superare
+\SI{50}{\micro\gram\per\cubic\metre} al massimo 35 volte all'anno. Per l'ozono
+la norma fissa invece un \emph{valore obiettivo}, cioè un livello da
+raggiungere, meno vincolante di un valore limite. La
+Tabella~\ref{tab:inquinanti} riporta, per ogni inquinante, l'unità di misura,
+il numero di misure presenti nel dataset e i principali limiti di legge. Questi
+valori costituiscono un riferimento per interpretare le concentrazioni misurate
+e definiscono la variabile da prevedere nel capitolo di classificazione. La
+nuova Direttiva (UE) 2024/2881 prevede limiti più stringenti a partire dal 2030
+\cite{direttiva2024}.
+
+\begin{table}[H]
+  \centering
+  \caption{Inquinanti presenti nel dataset e principali valori limite (Direttiva 2008/50/CE).}
+  \label{tab:inquinanti}
+  \small
+  \begin{tabularx}{\textwidth}{l l r >{\raggedright\arraybackslash}X r r}
+    \toprule
+    \textbf{Inquinante}                  & \textbf{Unità} & \textbf{Misure} & \textbf{Periodo di mediazione} & \textbf{Limite}        & \textbf{Superamenti/anno} \\
+    \midrule
+    NO\textsubscript{2}                  & \ugm           & \num{995793}    & 1 ora                          & 200                    & 18                        \\
+                                         &                &                 & anno civile                    & 40                     & --                        \\
+    PM10                                 & \ugm           & \num{894611}    & 24 ore                         & 50                     & 35                        \\
+                                         &                &                 & anno civile                    & 40                     & --                        \\
+    PM2,5                                & \ugm           & \num{890014}    & anno civile                    & 25                     & --                        \\
+    C\textsubscript{6}H\textsubscript{6} & \ugm           & \num{627446}    & anno civile                    & 5                      & --                        \\
+    O\textsubscript{3}                   & \ugm           & \num{562616}    & massima media mobile su 8 ore  & 120\textsuperscript{*} & 25\textsuperscript{**}    \\
+    CO                                   & \mgm           & \num{558442}    & massima media mobile su 8 ore  & 10                     & --                        \\
+    SO\textsubscript{2}                  & \ugm           & \num{376246}    & 1 ora                          & 350                    & 24                        \\
+                                         &                &                 & 24 ore                         & 125                    & 3                         \\
+    \bottomrule
+    \multicolumn{6}{l}{\footnotesize \textsuperscript{*} Valore obiettivo. \textsuperscript{**} Media su tre anni.}
+  \end{tabularx}
+\end{table}
+
+% ------------------------------------------------------------
+\section{Pre-processing}
+\label{sec:preprocessing}
+
+L'obiettivo del pre-processing è fornire ai capitoli successivi dati puliti e
+affidabili, documentando ogni scelta effettuata. Le operazioni sono state
+svolte in Python con la libreria pandas, in un notebook Jupyter dedicato.
+
+\subsection{Colonne eliminate}
+La colonna \texttt{\_id} è stata eliminata: non identifica le misure, ma è un
+numero di riga interno a ciascun file mensile, che riparte da 1 ogni mese. Nel
+file concatenato assume infatti solo \num{140415} valori distinti su
+\num{4905168} righe, esattamente il numero di righe del file più grande, quello
+di luglio 2026.
+
+La colonna \texttt{Um} è costante per ogni inquinante: tutte le concentrazioni
+sono espresse in \ugm, \textbf{tranne quelle del CO, espresse in \mgm (un milligrammo
+equivale a mille microgrammi)}. La colonna è stata mantenuta per completezza.
+Questa differenza va considerata quando si confrontano gli inquinanti tra loro:
+i valori del CO risultano numericamente molto più piccoli degli altri.
+
+\subsection{Conversione delle date}
+Il controllo della colonna \texttt{Data\_ora} ha rivelato la presenza di due
+formati diversi (Tabella~\ref{tab:formati_date}), il secondo formato riguarda solo le
+misure dal 7 al 10 ottobre 2025, probabilmente a causa di un cambiamento
+temporaneo nel sistema di pubblicazione dell'agenzia.
+
+\begin{table}[H]
+  \centering
+  \caption{Formati della colonna \texttt{Data\_ora}.}
+  \label{tab:formati_date}
+  \begin{tabular}{l l r}
+    \toprule
+    \textbf{Formato}                    & \textbf{Esempio}           & \textbf{Righe} \\
+    \midrule
+    \texttt{gg-mm-aaaa hh:mm:ss +01:00} & 26-10-2026 23:00:00 +01:00 & \num{4881186}  \\
+    \texttt{aaaa-mm-gg hh:mm:ss+01}     & 2025-10-07 01:00:00+01     & \num{23982}    \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Lasciare che pandas riconosca automaticamente il formato avrebbe portato a
+convertire correttamente solo una parte delle date. Abbiamo quindi letto i due
+formati in modo esplicito, indicando a pandas la struttura di ciascuno, e unito
+i risultati, tutte le date sono state convertite in datetime.
+
+Tutte le misure riportano lo stesso fuso orario (UTC+1), le date sono state quindi
+espresse in ora fissa UTC+1, senza passaggio all'ora legale dunque abbiamo deciso che l'indicazione
+del fuso doveva essere rimossa. Il periodo coperto va \textbf{dal 20/03/2023 alle 00:00 al
+26/10/2026 alle 23:00}.
+
+\paragraph{}
+\textbf{NOTA :} La documentazione di ARPAC non specifica se l'orario indichi l'inizio o la fine
+dell'intervallo di misura. Poiché ogni file mensile inizia alle 00:00 del primo
+giorno del mese, abbiamo assunto che l'orario indichi l'inizio dell'intervallo,
+senza applicare correzioni. Segnaliamo tuttavia che il 31/03/2024, giorno del
+passaggio all'ora legale, alcune stazioni presentano solo 23 ore di misure: ciò
+suggerisce che gli orari possano seguire in realtà l'ora locale italiana,
+nonostante l'indicazione UTC+1.
+
+\subsection{Valori mancanti codificati}
+Il dataset non contiene celle vuote, ma questo non significa che sia completo,
+per due motivi.
+
+In primo luogo, le ore in cui una stazione non ha misurato un
+inquinante non compaiono affatto nel file, l'assenza di una misura corrisponde
+all'assenza di una riga. 
+
+In secondo luogo, una volta convertiti in numeri, i
+valori della colonna \texttt{Valore} hanno rivelato misure non valide
+codificate con valori negativi:
+\begin{itemize}
+  \item \num{202303} valori pari a $-9999$ (circa il 4\% delle righe), codice
+        convenzionale di valore mancante;
+  \item 224 altri valori negativi, fisicamente impossibili per una
+        concentrazione: in parte piccoli valori vicini allo zero, dovuti al
+        rumore degli strumenti, in parte valori chiaramente errati (fino a
+        \SI{-104,1}{\micro\gram\per\cubic\metre} per l'O\textsubscript{3}).
+\end{itemize}
+Lasciati nel dataset, questi valori avrebbero falsato qualsiasi media,\textbf{ un solo
+$-9999$ in una giornata basterebbe a rendere fortemente negativa la media
+giornaliera}. I \num{202527} valori negativi sono stati quindi sostituiti con
+\texttt{NaN}, il valore mancante di pandas, che viene ignorato automaticamente
+nel calcolo delle medie. Le righe sono state invece conservate, per non
+interrompere la struttura delle serie temporali.
+
+\subsection{Esclusione delle stazioni}
+Dei 57 codici di stazione presenti, 21 non sono adatti alle analisi del
+progetto (Tabella~\ref{tab:stazioni_escluse}).
+
+\begin{table}[H]
+  \centering
+  \caption{Stazioni escluse dall'analisi.}
+  \label{tab:stazioni_escluse}
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Stazioni}                  & \textbf{Motivo}                                                          \\
+    \midrule
+    Laboratori mobili (LM01, LM03, MMA61, MMB62), impianti STIR, EDI01, EDI02
+                                       & stazioni non fisse, presenti solo dal 7 al 18 ottobre 2025               \\
+    IT2220A, IT2222A, IT2224A, IT2225A, IT2342A
+                                       & installate a marzo 2026: circa 7 mesi di dati, senza un inverno completo \\
+    IT2269A (Salerno Parco Mercatello) & dismessa ad agosto 2023, meno di 5 mesi di dati                          \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Le stazioni installate nel 2026 meritano una precisione. Le loro misure non
+sono errate e, nel periodo marzo-ottobre 2026, sono confrontabili con quelle
+delle altre stazioni. Tuttavia, poiché gli inquinanti hanno un forte andamento
+stagionale (il particolato e l'NO\textsubscript{2} raggiungono i valori massimi
+in inverno, l'ozono in estate), stazioni prive di dati invernali avrebbero
+medie non confrontabili con quelle delle stazioni attive per più anni. Abbiamo
+escluso anche la stazione IT2269A, dismessa dopo pochi mesi, e mantenuto invece
+la stazione IT2272A (Pozzuoli), attiva da giugno 2024: la scelta di includerla
+o meno è lasciata ai singoli capitoli, in base al periodo analizzato.
+
+L'esclusione ha eliminato \num{134842} righe; restano \textbf{36 stazioni}.
+
+\subsection{Valori anomali}
+I valori massimi di alcuni inquinanti sono risultati del tutto irrealistici:
+fino a \num{1437008} \ugm per il PM10, mentre anche gli episodi di inquinamento
+più intensi raramente superano poche centinaia di \ugm. Non abbiamo però
+applicato una soglia automatica, perché alcuni valori estremi corrispondono a
+fenomeni reali. Per ogni valore sospetto abbiamo invece osservato il contesto,
+cioè le misure delle ore precedenti e successive nella stessa stazione:
+\begin{itemize}
+  \item un valore \emph{isolato}, circondato da valori normali o mancanti, è stato
+        considerato un errore di misura;
+  \item un picco con una salita e una discesa graduali, distribuite su più ore, è stato
+        considerato un episodio reale di inquinamento.
+\end{itemize}
+
+I quattro valori della Tabella~\ref{tab:anomali} sono stati sostituiti con
+\texttt{NaN}. In tutti i casi il valore anomalo compare isolato, tra ore senza
+misure o con valori normali, ad esempio il valore di \num{1437008} \ugm della
+stazione IT1504A è l'unica misura di una mattinata in cui lo strumento registra
+solo $-9999$, mentre il PM2,5 della stazione IT0934A passa da circa
+\SI{20}{\micro\gram\per\cubic\metre} a \num{17792,5} e poi a \num{101090} \ugm,
+per tornare a valori normali nel pomeriggio.
+
+\begin{table}[H]
+  \centering
+  \caption{Valori anomali sostituiti con \texttt{NaN}.}
+  \label{tab:anomali}
+  \begin{tabular}{l l l r}
+    \toprule
+    \textbf{Stazione} & \textbf{Inquinante} & \textbf{Data e ora} & \textbf{Valore (\ugm)} \\
+    \midrule
+    IT1504A           & PM10                & 01/09/2023 09:00    & \num{1437008}          \\
+    IT1493A           & NO\textsubscript{2} & 22/11/2024 23:00    & \num{4992.6}           \\
+    IT0934A           & PM2,5               & 13/06/2025 10:00    & \num{17792.5}          \\
+    IT0934A           & PM2,5               & 13/06/2025 12:00    & \num{101090}           \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Al contrario, il picco di PM10 registrato a Napoli nella notte di Capodanno
+(stazione IT0898A) è stato conservato, la concentrazione sale nel corso della
+serata, raggiunge \SI{2721,9}{\micro\gram\per\cubic\metre} all'01:00 del
+01/01/2025 e torna gradualmente ai valori abituali nel corso della mattinata.
+Si tratta dell'effetto dei fuochi d'artificio. Anche i valori elevati del PM10 alla stazione
+IT2226A intorno a mezzogiorno del 01/01/2026 sono stati conservati.
+
+\paragraph{}
+\textbf{NOTA :} Segnaliamo infine la stazione IT1486A, che tra agosto e settembre 2024 registra
+per alcune giornate intere un valore di PM10 costante e molto elevato (tra
+\num{1596} e \num{2453} \ugm). \textbf{Questi valori non sono stati modificati, ma
+vanno considerati con cautela nelle analisi}.
+
+\subsection{Il particolato su base giornaliera}
+Cercando eventuali strumenti bloccati, abbiamo contato le giornate in cui una
+stazione registra lo stesso valore per tutte le ore disponibili (almeno 18). Il
+risultato varia molto da un inquinante all'altro: \num{5965} giornate per il
+PM10 e \num{6164} per il PM2,5, contro 2 per l'NO\textsubscript{2} e 2 per
+l'O\textsubscript{3} (e alcune centinaia per CO, SO\textsubscript{2} e benzene,
+i cui valori sono spesso bassi e misurati con una precisione limitata). Se si
+trattasse di guasti, colpirebbero tutti gli inquinanti in modo simile. \textbf{La
+spiegazione più probabile è invece il metodo di misura, sicuramente in molte stazioni il
+particolato viene misurato su base giornaliera, raccogliendo le particelle su
+un filtro per 24 ore, e il valore giornaliero viene poi ripetuto per tutte le
+ore della giornata}.
+
+Queste giornate costanti sono quindi misure valide e sono state conservate. Ne
+segue però che, per queste stazioni, il PM10 e il PM2,5 non hanno un vero
+profilo orario: \textbf{il particolato verrà analizzato a scala giornaliera}.
+
+\subsection{Dataset finale}
+Il dataset pulito è stato salvato in formato Parquet, più compatto e veloce da
+leggere di un file CSV, che conserva inoltre i tipi delle colonne (date e
+numeri). Le sue caratteristiche sono:
+\begin{itemize}
+  \item file \texttt{data/processed/aria\_campania\_orario.parquet}, in formato lungo e
+        a frequenza oraria;
+        % verificare il numero di righe con len(df) nel notebook
+  \item \num{4770326} righe, 36 stazioni, 7 inquinanti;
+  \item colonne \texttt{Stazione}, \texttt{Descrizione}, \texttt{Inquinante},
+        \texttt{Data\_ora}, \texttt{Valore}, \texttt{Um};
+  \item periodo dal 20/03/2023 al 26/10/2026.
+\end{itemize}
+Per identificare le stazioni va usato il codice (\texttt{Stazione}) e non il
+nome, la colonna \texttt{Descrizione} riporta infatti nomi diversi per la
+stessa stazione a seconda del mese (ad esempio ``Casoria Scuola Palizzi'' e
+``Casoria Scuola Palizzi (CAM)'').
+
+% ------------------------------------------------------------
+\section{Qualità e continuità dei dati}
+\label{sec:continuita}
+
+La Figura~\ref{fig:completezza} mostra, per ogni stazione e ogni mese, la quota
+di giorni in cui è disponibile almeno una misura di PM10. La figura è stata
+prodotta prima dell'esclusione delle stazioni e include quindi anche le
+stazioni escluse, visibili come righe quasi interamente rosse.
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=1.0\textwidth]{completezza_pm10.png}
+    \caption{Completezza giornaliera del PM10 per stazione e mese.}
+    \label{fig:completezza}
+\end{figure}
+
+Per la maggior parte delle stazioni la copertura è molto buona, 31 stazioni
+hanno dati di PM10 per l'86-94\% dei giorni. Le lacune più evidenti (dicembre
+2023, aprile 2025 e il periodo maggio-ottobre 2025) colpiscono tutte le
+stazioni contemporaneamente, non sono quindi dovute a guasti dei singoli
+strumenti, ma alla pubblicazione o alla validazione dei dati da parte
+dell'agenzia. Per questo motivo non possono essere colmate con le misure delle
+stazioni vicine.
+
+\textbf{IMPORTANTE :} Non tutte le stazioni misurano tutti gli inquinanti. La
+Tabella~\ref{tab:copertura} riporta, per ogni inquinante, il numero di stazioni
+con dati disponibili per almeno l'80\% dei giorni: il NO\textsubscript{2} e i
+particolati PM sono misurati in quasi tutte le stazioni, mentre l'ozono e
+soprattutto il biossido di zolfo solo in una parte della rete.
+
+\begin{table}[H]
+  \centering
+  \caption{Stazioni con almeno l'80\% dei giorni con dati (aprile 2023 -- settembre 2026).}
+  \label{tab:copertura}
+  \begin{tabular}{l c c c c c c c}
+    \toprule
+             & NO\textsubscript{2} & PM10 & PM2,5 & C\textsubscript{6}H\textsubscript{6} & CO & O\textsubscript{3} & SO\textsubscript{2} \\
+    \midrule
+    Stazioni & 35                  & 32   & 32    & 23                                   & 20 & 19                 & 13                  \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Per l'analisi delle serie temporali, la continuità del periodo aprile 2023 --
+marzo 2025 è buona, mancano solo 11 giorni su 731 (1,5\%) in cui nessuna
+stazione ha misurato il PM10, con al massimo 3 giorni consecutivi (21--23
+dicembre 2023). Si tratta di lacune brevi, che possono essere colmate per
+interpolazione.
+
+% ============================================================
+%  CAPITOLO 2 - ANALISI DESCRITTIVA
+% ============================================================
+\chapter{Analisi descrittiva}
+\label{cap:descrittiva}
+
+% ------------------------------------------------------------
+\section{Introduzione}
+\label{sec:intro_descrittiva}
+
+Questo capitolo esplora i dati puliti ottenuti con il pre-processing
+(Capitolo~\ref{cap:dataset}), con l'obiettivo di descrivere le distribuzioni
+degli inquinanti, il loro andamento nel tempo, le differenze tra le stazioni e le
+relazioni tra inquinanti.
+
+\subsection{Librerie utilizzate}
+L'analisi è stata svolta in Python, in un notebook Jupyter dedicato, con le
+seguenti librerie:
+\begin{itemize}
+  \item \textbf{pandas}: lettura del dataset in formato Parquet, filtri,
+        raggruppamenti e calcolo delle medie giornaliere, mensili e orarie;
+  \item \textbf{NumPy}: operazioni numeriche e gestione dei valori mancanti;
+  \item \textbf{Matplotlib} e \textbf{Seaborn}: realizzazione dei grafici
+        (boxplot, serie temporali, grafici a barre e mappe di calore);
+  \item \textbf{SciPy}: utilizzata da pandas per il calcolo della correlazione
+        di Spearman.
+\end{itemize}
+
+\subsection{Scala temporale}
+La maggior parte delle analisi utilizza le \emph{medie giornaliere} di ciascun
+inquinante in ciascuna stazione. Questa è la scala dei valori limite giornalieri ed
+è l'unica significativa per il particolato, il cui valore in molte stazioni è
+giornaliero e ripetuto su tutte le ore (Sezione~\ref{sec:preprocessing}). Seguendo
+il criterio adottato dalla normativa europea, una media giornaliera è considerata
+valida solo se calcolata su almeno 18 ore di misure (75\% della giornata). Solo il
+profilo orario (Sezione~\ref{sec:temporale}) utilizza i dati orari, e solo per i gas.
+
+Nei grafici che mostrano l'andamento complessivo della regione si utilizza la
+\emph{media di rete}, cioè la media delle medie giornaliere di tutte le stazioni
+disponibili in un determinato giorno. Poiché il numero di stazioni attive varia
+leggermente nel tempo (guasti, attivazione della stazione IT2272A a giugno 2024),
+la media di rete non è calcolata ogni giorno esattamente sulle stesse stazioni; ciò
+non altera tuttavia la lettura degli andamenti generali.
+
+% ------------------------------------------------------------
+\section{Statistiche descrittive per inquinante}
+\label{sec:statistiche}
+
+\begin{table}[H]
+  \centering
+  \caption{Statistiche descrittive delle medie giornaliere per inquinante (\ugm, CO in \mgm).}
+  \label{tab:describe}
+  \small
+  \begin{tabular}{l r r r r r r r r}
+    \toprule
+    \textbf{Inquinante} & \textbf{N} & \textbf{Media} & \textbf{Dev.\ std.} & \textbf{Min} & \textbf{25\%} & \textbf{Mediana} & \textbf{75\%} & \textbf{Max} \\
+    \midrule
+    PM10 & \num{35057} & \num{26.1} & \num{30.2} & \num{0.0} & \num{14.8} & \num{21.8} & \num{31.4} & \num{2453.0} \\
+    PM2,5 & \num{35186} & \num{13.9} & \num{12.0} & \num{0.0} & \num{7.5} & \num{11.4} & \num{16.8} & \num{345.0} \\
+    NO\textsubscript{2} & \num{38913} & \num{23.0} & \num{14.8} & \num{0.0} & \num{12.1} & \num{20.3} & \num{31.0} & \num{212.9} \\
+    O\textsubscript{3} & \num{21635} & \num{56.1} & \num{23.0} & \num{0.0} & \num{39.7} & \num{56.5} & \num{71.6} & \num{529.0} \\
+    CO & \num{21678} & \num{0.5} & \num{0.3} & \num{0.0} & \num{0.3} & \num{0.4} & \num{0.6} & \num{18.4} \\
+    SO\textsubscript{2} & \num{14392} & \num{2.8} & \num{3.5} & \num{0.0} & \num{1.0} & \num{2.2} & \num{3.7} & \num{289.5} \\
+    C\textsubscript{6}H\textsubscript{6} & \num{24309} & \num{1.0} & \num{1.0} & \num{0.0} & \num{0.4} & \num{0.7} & \num{1.2} & \num{22.2} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Le colonne della Tabella~\ref{tab:describe} hanno il seguente significato:
+\begin{itemize}
+  \item \textbf{N}: numero di medie giornaliere valide (coppie stazione-giorno);
+  \item \textbf{Media}: media aritmetica delle medie giornaliere;
+  \item \textbf{Dev.\ std.}: deviazione standard, che misura quanto i valori si
+        discostano in media dalla media: più è alta, più le concentrazioni sono variabili;
+  \item \textbf{Min} e \textbf{Max}: valore minimo e massimo osservati;
+  \item \textbf{25\%}: primo quartile, cioè il valore al di sotto del quale si
+        trova il 25\% delle giornate;
+  \item \textbf{Mediana}: valore che divide le giornate in due metà uguali
+        (il 50\% delle giornate ha un valore inferiore, il 50\% superiore); a
+        differenza della media, non è influenzata dai valori estremi;
+  \item \textbf{75\%}: terzo quartile, cioè il valore al di sotto del quale si
+        trova il 75\% delle giornate.
+\end{itemize}
+Quando la media è nettamente superiore alla mediana, la distribuzione è
+asimmetrica a destra: la maggior parte delle giornate presenta valori bassi, ma
+alcune giornate con valori molto elevati alzano la media.
+
+Il numero di medie giornaliere varia molto tra gli inquinanti, poiché non tutte le
+stazioni li misurano tutti: da \num{38913} per l'NO\textsubscript{2}, misurato in
+quasi tutta la rete, a \num{14392} per l'SO\textsubscript{2}. Per tutti gli
+inquinanti la media è superiore alla mediana, segno di distribuzioni asimmetriche a
+destra. Il caso più evidente è il PM10: la media (\SI{26,1}{\micro\gram\per\cubic\metre})
+supera la mediana (\SI{21,8}{\micro\gram\per\cubic\metre}) e la deviazione standard
+(\num{30,2}) è superiore alla media stessa, per effetto di pochi valori estremi,
+come le giornate anomale della stazione IT1486A, che determinano il massimo di
+\num{2453} \ugm. Al contrario, l'intervallo tra primo e terzo quartile, da 14,8 a
+\SI{31,4}{\micro\gram\per\cubic\metre}, descrive bene le giornate abituali.
+
+Alcuni valori massimi appaiono poco plausibili anche come medie giornaliere, \textbf{in
+particolare \SI{529}{\micro\gram\per\cubic\metre} per l'ozono e
+\SI{289,5}{\micro\gram\per\cubic\metre} per l'SO\textsubscript{2}}. Questi valori, non individuati durante il pre-processing,
+riguardano un numero molto limitato di giornate e non modificano mediane e quartili,
+ma vanno tenuti presenti nei capitoli successivi.
+
+% ------------------------------------------------------------
+\section{Distribuzione dei valori}
+\label{sec:distribuzioni}
+
+\figura{distribuzione_inquinanti.png}{Distribuzione delle medie giornaliere per inquinante (CO escluso, perché misurato in \mgm; valori estremi non rappresentati).}{fig:distribuzioni}
+
+La Figura~\ref{fig:distribuzioni} confronta le distribuzioni delle medie
+giornaliere tramite boxplot: la linea interna a ciascun rettangolo indica la
+mediana, \textbf{il rettangolo contiene il 50\% centrale delle giornate (dal primo al terzo
+quartile)} e i segmenti si estendono fino ai valori più lontani non considerati
+estremi. Per leggibilità, i valori estremi non sono rappresentati; il CO è escluso
+perché misurato in un'unità diversa (\mgm).
+
+L'ozono presenta le concentrazioni più elevate (mediana di circa
+\SI{56}{\micro\gram\per\cubic\metre}, con metà delle giornate tra 40 e
+\SI{72}{\micro\gram\per\cubic\metre}) e la dispersione maggiore, coerente con la
+sua forte stagionalità (Sezione~\ref{sec:temporale}). L'NO\textsubscript{2} e il
+PM10 hanno livelli simili, con mediane intorno a 20--\SI{22}{\micro\gram\per\cubic\metre};
+il segmento superiore del PM10 supera il limite giornaliero di
+\SI{50}{\micro\gram\per\cubic\metre}, ma oltre il terzo quartile (circa
+\SI{31}{\micro\gram\per\cubic\metre}), i superamenti riguardano quindi una minoranza
+di giornate. Questa informazione è rilevante per la classificazione, perché le due
+classi (superamento e non superamento) risulteranno sbilanciate. Il PM2,5 vale circa
+la metà del PM10 (mediana di circa \SI{11}{\micro\gram\per\cubic\metre}), mentre
+l'SO\textsubscript{2} e il benzene restano su valori molto bassi, lontani dai
+rispettivi limiti.
+
+% ------------------------------------------------------------
+\section{Andamento temporale}
+\label{sec:temporale}
+
+\subsection{Andamento complessivo 2023--2026}
+
+\figura{andamento_temporale.png}{Media giornaliera di rete di PM10, NO\textsubscript{2} e O\textsubscript{3} (in grigio) e media mobile centrata a 7 giorni.}{fig:andamento}
+
+La Figura~\ref{fig:andamento} mostra la media giornaliera di rete di PM10,
+NO\textsubscript{2} e O\textsubscript{3}. Per rendere leggibile l'andamento di
+lungo periodo, ai valori giornalieri (in grigio) è sovrapposta la media mobile
+centrata a 7 giorni, in cui ogni giorno è sostituito dalla media dei sette giorni
+che lo circondano, questa attenua le fluttuazioni giornaliere e il ciclo
+settimanale, \textbf{mettendo in evidenza le variazioni stagionali. I giorni mancanti non
+sono interpolati, così che le lacune dei dati restino visibili}.
+
+L'ozono (Troposfera: l'ozono "inquinante") presenta una stagionalità molto marcata e regolare, raggiunge
+70--\SI{80}{\micro\gram\per\cubic\metre} in estate e scende intorno a
+\SI{30}{\micro\gram\per\cubic\metre} in inverno, per effetto della radiazione
+solare che ne favorisce la formazione. L'NO\textsubscript{2} segue l'andamento
+opposto, con valori massimi in inverno (35--\SI{40}{\micro\gram\per\cubic\metre})
+e minimi in estate.
+
+Il PM10 mostra una stagionalità meno evidente, i valori abituali restano tra 15 e
+\SI{35}{\micro\gram\per\cubic\metre}, ma emergono alcuni episodi intensi, tra cui
+l'evento dell'inizio di aprile 2024 e le notti di Capodanno del 2025 e del 2026
+(Sezione~\ref{sec:eventi}). La media di rete supera il limite giornaliero di
+\SI{50}{\micro\gram\per\cubic\metre} solo durante questi episodi, mentre singole
+stazioni possono superarlo anche quando la media di rete resta inferiore.
+
+Il grafico rende visibili anche le lacune della rete descritte nella
+Sezione~\ref{sec:continuita}, in particolare il periodo frammentato tra aprile e
+ottobre 2025. Il periodo aprile 2023 -- marzo 2025 si conferma il più continuo.
+
+\subsection{Stagionalità}
+
+\figura{stagionalita_mensile.png}{Concentrazione media di PM10, PM2,5, NO\textsubscript{2} e O\textsubscript{3} per mese dell'anno.}{fig:stagionalita}
+
+La Figura~\ref{fig:stagionalita} riporta la concentrazione media di ciascun
+inquinante per mese dell'anno, raggruppando gli stessi mesi di anni diversi.
+L'ozono raggiunge i valori massimi in luglio e agosto (circa
+\SI{68}{\micro\gram\per\cubic\metre}) e i minimi in dicembre (circa
+\SI{37}{\micro\gram\per\cubic\metre}), quasi dimezzandosi. L'NO\textsubscript{2}
+segue l'andamento opposto, con il massimo in dicembre (circa
+\SI{29}{\micro\gram\per\cubic\metre}) e i minimi in maggio e agosto (circa
+\SI{19}{\micro\gram\per\cubic\metre}), in inverno la maggiore stabilità
+dell'atmosfera, con frequenti inversioni termiche, ostacola la dispersione degli
+inquinanti, mentre in estate parte dell'NO\textsubscript{2} è consumata nella
+formazione dell'ozono.
+
+Il PM2,5 è nettamente più elevato in inverno (circa
+\SI{24}{\micro\gram\per\cubic\metre} in dicembre, contro
+\SI{9}{\micro\gram\per\cubic\metre} in maggio), \textbf{in coerenza con il contributo della
+combustione e del riscaldamento domestico}. Il PM10 presenta invece due massimi: uno
+invernale, analogo a quello del PM2,5, e uno estivo, in luglio e agosto, assente nel
+PM2,5. Il rapporto PM2,5/PM10 scende infatti da circa 0,7 in dicembre a circa 0,5
+nei mesi estivi, in estate prevalgono le particelle più grossolane, tra
+\SI{2,5}{} e \SI{10}{\micro\metre}, riconducibili \textbf{ad esempio alle polveri sahariane,
+alla risospensione del suolo secco e al sale marino}.
+
+Va osservato che i mesi non sono rappresentati in modo uniforme: i dati iniziano a
+marzo 2023, terminano a ottobre 2026 e presentano ampie lacune tra aprile e ottobre
+2025. Alcuni mesi, come dicembre, sono quindi rappresentati da un numero limitato di
+anni, e un singolo episodio intenso può influenzarne sensibilmente la media.
+
+\subsection{Ciclo settimanale}
+
+\figura{ciclo_settimanale.png}{Scarto percentuale della concentrazione media di ciascun giorno della settimana rispetto alla media settimanale.}{fig:settimanale}
+
+La Figura~\ref{fig:settimanale} riporta, per ogni inquinante, lo scarto percentuale
+della concentrazione media di ciascun giorno della settimana rispetto alla media
+settimanale; questa rappresentazione permette di confrontare inquinanti con livelli
+e unità di misura diversi. Gli inquinanti legati al traffico mostrano un netto calo
+nel fine settimana, la domenica l'NO\textsubscript{2} è inferiore alla media di
+circa il 15\%, il benzene di circa il 13\% e il CO di circa il 6\%, mentre nei
+giorni feriali restano al di sopra della media, con i valori più alti tra giovedì e
+venerdì. Anche il PM10 diminuisce la domenica (circa $-10$\%), a \textbf{conferma del
+contributo del traffico al particolato (emissioni dei veicoli, usura di freni e
+pneumatici, risospensione delle polveri stradali)}.
+
+L'ozono segue l'andamento opposto, con valori inferiori alla media nei giorni
+feriali e superiori nel fine settimana (circa $+3{,}5$\% la domenica). con meno
+traffico.
+
+\textbf{In ambito urbano viene consumato meno ozono dalle emissioni dei veicoli
+(``effetto weekend'')}.
+
+\subsection{Ciclo giornaliero}
+
+\figura{ciclo_giornaliero.png}{Profilo orario medio di NO\textsubscript{2}, O\textsubscript{3}, CO e benzene, espresso come scarto percentuale dalla media giornaliera.}{fig:giornaliero}
+
+La Figura~\ref{fig:giornaliero} mostra il profilo orario medio dei gas, espresso
+come scarto percentuale dalla media giornaliera. Il particolato è escluso da questa
+analisi, poiché in molte stazioni il suo valore è giornaliero e ripetuto su tutte
+le ore.
+
+L'NO\textsubscript{2}, il CO e il benzene presentano due massimi, in corrispondenza
+delle ore di punta del traffico, il primo al mattino, intorno alle 7--8 (circa
+$+29$\% per l'NO\textsubscript{2}), il secondo, più intenso, in serata, tra le 19 e
+le 21 (circa $+36$\% per l'NO\textsubscript{2} e $+39$\% per il benzene).
+
+L'ozono segue un andamento opposto: è minimo all'alba (circa $-31$\%) e raggiunge
+il massimo nel primo pomeriggio (circa $+42$\% intorno alle 14), quando la
+radiazione solare è più intensa; in serata diminuisce rapidamente, consumato dalle
+emissioni del traffico.
+
+Poiché la documentazione ARPAC non chiarisce se l'orario indichi l'inizio o la fine
+dell'intervallo di misura, né se tenga conto dell'ora legale, gli orari dei massimi
+e dei minimi vanno letti con un'incertezza di circa un'ora.
+
+% ------------------------------------------------------------
+\section{Confronto tra stazioni}
+\label{sec:spaziale}
+
+\figura{media_per_stazione.png}{Media delle concentrazioni giornaliere di PM10 per stazione (stazioni con almeno 365 giorni di dati).}{fig:stazioni}
+
+La Figura~\ref{fig:stazioni} confronta la media delle concentrazioni giornaliere di
+PM10 delle stazioni con almeno un anno di dati. La linea tratteggiata indica il
+valore limite annuale di \SI{40}{\micro\gram\per\cubic\metre}, riportato come
+riferimento.
+
+Le differenze tra le stazioni sono marcate, le medie vanno da circa
+\SI{17}{\micro\gram\per\cubic\metre} a circa \SI{40}{\micro\gram\per\cubic\metre}.
+Le stazioni più inquinate \textbf{si concentrano nell'area densamente urbanizzata e
+industriale a nord-est di Napoli, verso la provincia di Caserta} (Acerra Zona
+Industriale) che raggiunge il valore di riferimento di
+\SI{40}{\micro\gram\per\cubic\metre} : San Vitaliano, Acerra Scuola Caporale,
+Casoria, Aversa e Pomigliano d'Arco. 
+
+Le meno inquinate sono le stazioni dell'interno
+e delle aree rurali (Polla, Ottati Alburni, Avellino Scuola Alighieri) e quelle
+situate in parchi o in collina (Portici Parco Reggia, Napoli Osservatorio
+Astronomico).
+
+La presenza di una zona industriale non comporta necessariamente
+valori elevati: le stazioni di Solofra e Benevento Zona Industriale si collocano
+nella parte bassa della classifica.
+
+\paragraph{}
+\textbf{IMPORTANTE:} La media della stazione IT1486A (Caserta CE51) è influenzata da alcune giornate
+dell'agosto--settembre 2024 con valori di PM10 costanti e anomali (tra \num{1596} e
+\num{2453} \ugm, Sezione~\ref{sec:preprocessing}), conservati nel dataset: senza di
+esse, la sua media scenderebbe a circa \SI{18,9}{\micro\gram\per\cubic\metre}. La
+media della stazione IT2272A (Pozzuoli) si riferisce invece a un periodo più breve,
+a partire da giugno 2024.
+
+% ------------------------------------------------------------
+\section{Eventi particolari}
+\label{sec:eventi}
+
+\subsection{La notte di Capodanno}
+
+\figura{capodanno_2025.png}{PM10 orario alla stazione IT0898A (Napoli) nella notte di Capodanno 2025. La linea tratteggiata indica il limite giornaliero, riportato come riferimento.}{fig:capodanno}
+
+La Figura~\ref{fig:capodanno} mostra il PM10 orario alla stazione IT0898A (Napoli,
+Museo Nazionale) nella notte tra il 31 dicembre 2024 e il 1° gennaio 2025. Già dalle
+18:00 del 31 dicembre il PM10 si attesta tra 200 e
+\SI{300}{\micro\gram\per\cubic\metre}; sale poi a
+\SI{1992}{\micro\gram\per\cubic\metre} alle 00:00 e a
+\SI{2721,9}{\micro\gram\per\cubic\metre} alle 01:00, per tornare gradualmente ai
+valori abituali, occorrono oltre nove ore perché scenda sotto
+\SI{50}{\micro\gram\per\cubic\metre} (\SI{35,8}{\micro\gram\per\cubic\metre} alle
+10:00). \textbf{L'andamento, con una salita e una discesa graduali, è quello tipico di un
+episodio reale di inquinamento, dovuto ai fuochi d'artificio.} Un episodio analogo,
+meno intenso, si osserva a Capodanno 2026 alla stazione IT2226A (Pomigliano d'Arco),
+con un massimo di \SI{793,9}{\micro\gram\per\cubic\metre} alle 02:00.
+
+\subsection{L'episodio del 31 marzo -- 1 aprile 2024}
+
+Tra il 31 marzo e il 1 aprile 2024 diverse stazioni, anche lontane tra loro,
+registrano valori giornalieri elevati di PM10 (da 136 a
+\SI{260}{\micro\gram\per\cubic\metre}), che producono il picco più alto della media
+di rete nell'intero periodo (Figura~\ref{fig:andamento}). La contemporaneità tra
+stazioni distanti suggerisce un evento su scala regionale, come un'intrusione di
+polveri sahariane, frequente in primavera nell'Italia meridionale; \textbf{questa ipotesi
+richiederebbe una verifica con fonti esterne.}
+
+% ------------------------------------------------------------
+\section{Correlazioni tra inquinanti}
+\label{sec:correlazioni}
+
+\figura{correlazione_pearson.png}{Matrice di correlazione di Pearson tra le medie giornaliere degli inquinanti.}{fig:pearson}
+
+\figura{correlazione_spearman.png}{Matrice di correlazione di Spearman tra le medie giornaliere degli inquinanti.}{fig:spearman}
+
+Le Figure~\ref{fig:pearson} e~\ref{fig:spearman} riportano le correlazioni tra le
+medie giornaliere degli inquinanti, calcolate per ogni coppia di stazione e giorno;
+per ogni coppia di inquinanti sono utilizzate solo le giornate in cui entrambi sono
+misurati. La correlazione di Pearson misura la relazione lineare tra due variabili,
+mentre quella di Spearman è calcolata sui ranghi dei valori (la giornata con il
+valore più basso ha rango 1, la successiva rango 2, e così via) e misura una
+relazione monotona, è quindi meno sensibile ai valori estremi. Entrambe variano tra
+$-1$ (relazione inversa perfetta) e $+1$ (relazione diretta perfetta).
+
+Le due misure concordano per la maggior parte delle coppie. Gli inquinanti legati
+al traffico (NO\textsubscript{2}, CO e benzene) sono correlati positivamente tra
+loro (circa 0,5), mentre l'ozono è correlato negativamente con tutti gli altri
+inquinanti, in particolare con l'NO\textsubscript{2} ($-0{,}54$ secondo Pearson,
+$-0{,}58$ secondo Spearman), in coerenza con l'andamento opposto osservato su scala
+stagionale, settimanale e giornaliera. L'SO\textsubscript{2} risulta quasi
+indipendente dagli altri inquinanti (correlazioni comprese tra 0,1 e 0,3), a
+conferma di sorgenti specifiche, industriali e portuali.
+
+La differenza più marcata riguarda la coppia PM10--PM2,5: la correlazione di Pearson
+è pari a 0,48, quella di Spearman a 0,84. Poiché il PM2,5 è una frazione del PM10, la
+seconda descrive meglio il legame tra le due variabili, la correlazione di Pearson è
+abbassata da pochi valori estremi di PM10 senza corrispondente aumento del PM2,5,
+come le giornate anomale della stazione IT1486A conservate nel dataset. Per la
+coppia benzene--PM2,5 avviene il contrario, la correlazione di Pearson (0,62) è
+superiore a quella di Spearman (0,44), perché poche giornate in cui entrambi gli
+inquinanti sono molto elevati ne accentuano la relazione lineare. Data l'asimmetria
+delle distribuzioni e la presenza di valori estremi, la correlazione di Spearman è
+la misura più affidabile per questi dati.
+
+% ------------------------------------------------------------
+\section{Conclusioni}
+\label{sec:conclusioni_descrittiva}
+
+L'analisi descrittiva ha evidenziato i seguenti risultati principali:
+\begin{itemize}
+  \item gli inquinanti presentano una forte \textbf{stagionalità}: l'ozono è
+        massimo in estate, mentre NO\textsubscript{2} e PM2,5 sono massimi in
+        inverno; il PM10 presenta anche un secondo massimo estivo, dovuto alle
+        particelle più grossolane;
+  \item il \textbf{traffico} è una sorgente importante: gli inquinanti a esso
+        legati diminuiscono nel fine settimana e presentano due massimi giornalieri
+        in corrispondenza delle ore di punta;
+  \item l'\textbf{ozono} si comporta in modo opposto all'NO\textsubscript{2} su
+        tutte le scale temporali, come confermato dalla correlazione negativa;
+  \item le \textbf{differenze tra stazioni} sono marcate: le medie di PM10 vanno
+        da circa 17 a circa \SI{40}{\micro\gram\per\cubic\metre}, con i valori più
+        alti nell'area a nord-est di Napoli;
+  \item alcuni \textbf{episodi} (Capodanno, evento di inizio aprile 2024)
+        producono valori molto superiori alla norma.
+\end{itemize}
+
+Questi risultati ci aiutano a comprendere le caratteristiche dei dati e a guidare le scelte metodologiche per 
+i capitoli successivi, in particolare per la classificazione, il clustering e il forecasting.
+
+%Questi risultati orientano i capitoli successivi. Per la \textbf{classificazione},
+%i superamenti del limite giornaliero di PM10 riguardano una minoranza delle giornate:
+%le classi saranno quindi sbilanciate, e la stagionalità e il giorno della settimana
+%costituiscono informazioni utili per la previsione. Per il \textbf{clustering}, le
+%differenze di livello e di composizione tra le stazioni suggeriscono l'esistenza di
+%gruppi distinti. Per il \textbf{forecasting}, la marcata stagionalità annuale e
+%settimanale dovrà essere considerata nella scelta del modello, sul periodo continuo
+%aprile 2023 -- marzo 2025. Infine, la presenza di valori estremi, come le giornate
+%anomale della stazione IT1486A, suggerisce di preferire metodi robusti o di
+%valutarne l'effetto sui risultati.
+
+% ==================== CAPITOLO 3 - CLASSIFICAZIONE ====================
+\chapter{CLASSIFICAZIONE}
+
+% ==================== CAPITOLO 4 - CLUSTERING ====================
+\chapter{CLUSTERING}
+
+% ==================== CAPITOLO 5 - FORECASTING ====================
+\chapter{FORECASTING}
+
+\chapter{CONCLUSIONI}
+
+% -------------------- Bibliografia --------------------
+\bibliographystyle{ieeetr}
+\bibliography{bibl}
+\end{document}
