@@ -3,7 +3,7 @@
 
 # Dati: troppo pesanti per GitHub (fonte indicata nel README di ogni progetto)
 **/data/raw/
-**/data/processed/
+# : **/data/processed/
 
 # Python / Jupyter
 __pycache__/
