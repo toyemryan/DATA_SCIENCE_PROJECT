@@ -1,38 +1,9 @@
-"""Previsione della qualità dell'aria in Campania a 1–7 giorni: un unico script, dai dati grezzi ai grafici.
+"""Previsione della qualità dell'aria in Campania a 1–7 giorni
+Inquinanti (PM10, PM2.5, NO2, O3, SO2, CO, C6H6)
+Training fino al 31/12/2025, test dal 01/01/2026 al 26/10/2026 (ultimo giorno con dati)
 
-COSA FA
-    Parte dal CSV orario delle centraline ARPAC e, per 7 inquinanti (PM10, PM2.5, NO2, O3, SO2, CO, C6H6),
-    confronta sette modi di prevedere il valore giornaliero dei giorni successivi:
-
-        Persistenza           "domani = oggi" (la baseline da battere)
-        Seasonal naive        "domani = lo stesso giorno della settimana scorsa"
-        ARIMA                 modello autoregressivo classico, un modello per stazione
-        SARIMAX               ARIMA + stagionalità settimanale + stagionalità annuale + festività
-        Prophet               trend + stagionalità + festività, senza usare i dati recenti
-        Prophet + lag         Prophet + ultimo valore e media degli ultimi 7 giorni come regressori
-        XGBoost               alberi di decisione, un modello unico per tutte le stazioni
-
-LE TRE FASI (eseguibili insieme o separatamente)
-    1. prep      CSV orario -> pulizia -> medie giornaliere per stazione   -> cache/daily_panel.parquet
-    2. forecast  stima, previsione e valutazione di tutti i modelli        -> forecast_results.md + cache/*
-    3. plots     i 18 grafici del report                                   -> figures/*.png
-
-SCHEMA DI VALUTAZIONE
-    - training fino al 31/12/2025, test dal 01/01/2026 al 26/10/2026 (ultimo giorno con dati)
-    - orizzonte h = 1..7: il giorno t si prevede usando solo i dati fino al giorno t-h
-    - i parametri dei modelli si stimano una volta sola sul training; nel test si aggiornano solo i dati
-    - tutti i modelli lavorano su log(1 + valore); le previsioni si riconvertono con exp(x) - 1
-    - in più: una previsione "operativa" per i 7 giorni dopo l'ultimo dato, con intervallo all'80%
-
-COME SI ESEGUE (Prophet non supporta ancora Python 3.14, quindi si usa il 3.12)
-    uv run --python 3.12 --with pandas --with pyarrow --with statsmodels --with prophet --with xgboost \\
-           --with scikit-learn --with tabulate --with matplotlib python air_quality_forecast.py
-
-    Solo alcune fasi:            ... python air_quality_forecast.py prep forecast
-    Solo alcuni inquinanti:      ... python air_quality_forecast.py forecast --pollutants PM10 NO2
-
-    Tempi indicativi su 20 core: prep ~1 min, forecast ~5 min, plots ~20 s.
-    La spiegazione completa dei metodi e dei risultati è in forecasting_explained.md.
+uv run --python 3.12 --with pandas --with pyarrow --with statsmodels --with prophet --with xgboost \\
+        --with scikit-learn --with tabulate --with matplotlib python air_quality_forecast.py
 """
 import argparse
 import itertools
@@ -67,12 +38,9 @@ logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
 logging.getLogger("prophet").setLevel(logging.WARNING)
 
 
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
-# 0. CONFIGURAZIONE
-#    Tutto ciò che si potrebbe voler cambiare è qui: file, periodi, stazioni, inquinanti e soglie.
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-# ---- file di input e di output
+#########################
+# CONFIGURAZIONE
+#########################
 ROOT = Path(__file__).resolve().parent.parent   # 4_FORECASTING/
 CSV = ROOT.parent / "data" / "raw" / "qualita_aria_campania_validati.csv"   # dati orari grezzi (input)
 CACHE = ROOT / "cache"
@@ -85,19 +53,19 @@ OUT_IMP = CACHE / "xgb_feature_importance.csv"       # fase 2: importanza delle 
 OUT_COMP = CACHE / "prophet_components.parquet"      # fase 2: componenti stagionali stimate da Prophet
 REPORT_MD = ROOT / "forecast_results.md"             # fase 2: tabelle complete dei risultati
 
-# ---- periodi
+# periodi
 TRAIN_END = pd.Timestamp("2025-12-31")               # ultimo giorno usato per stimare i modelli
 TEST_START = TRAIN_END + pd.Timedelta(days=1)
 TEST_END = pd.Timestamp("2026-10-26")                # ultimo giorno con dati
 H = 7                                                # orizzonte massimo di previsione (giorni)
 FC_END = TEST_END + pd.Timedelta(days=H)             # ultimo giorno della previsione operativa
 
-# ---- regole di pulizia dei dati orari (vedi analisi_descrittiva_qualita_aria.md, §2)
+# regole di pulizia dei dati orari
 PHYSICAL_LIMITS = {"PM10": 5000, "PM2.5": 5000, "NO2": 1000, "O3": 500, "SO2": 1000, "CO": 50, "C6H6": 100}
 MIN_VALID_HOURS = 18   # un giorno è valido se ha almeno 18 ore valide su 24 (regola del 75%, D.Lgs. 155/2010)
 STUCK_HOURS = 6        # sensore "bloccato": almeno 6 ore consecutive con lo stesso valore estremo
 
-# ---- stazioni
+# stazioni
 STATION_NAMES = {
     "IT2211A": "Acerra Zona Industriale",
     "IT2212A": "San Vitaliano Scuola Marconi",
@@ -111,7 +79,7 @@ STATION_NAMES = {
 }
 CORE = ["IT2211A", "IT2212A", "IT1491A", "IT2227A"]  # le 4 stazioni di valutazione del PM10
 
-# ---- inquinanti
+# inquinanti
 #   col       colonna del pannello giornaliero usata come target
 #   unit      unità di misura
 #   thr       soglia giornaliera per i "superamenti" (None = l'inquinante ha solo un limite annuale)
@@ -134,12 +102,12 @@ POLLUTANTS = {
 # inquinanti il cui valore di ieri entra come feature in XGBoost (escluso l'inquinante che si sta prevedendo)
 XGB_OTHER_POLLUTANTS = ["PM10", "PM2.5", "NO2", "O3"]
 
-# ---- modelli (nomi interni, usati come nomi di colonna) e nomi visualizzati nel report e nei grafici
+# modelli (nomi interni, usati come nomi di colonna) e nomi visualizzati nel report e nei grafici
 MODELS = ["Persistence", "Seasonal naive (t-7)", "ARIMA", "SARIMAX", "Prophet", "Prophet + lags", "XGBoost"]
 MODEL_LABELS = {"Persistence": "Persistenza", "Seasonal naive (t-7)": "Seasonal naive (t−7)",
                 "Prophet + lags": "Prophet + lag"}
 
-# ---- calendario italiano
+# calendario italiano
 IT_HOLIDAYS = holidays.Italy(years=range(2023, 2027))
 IT_MONTHS = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]
 IT_WEEKDAYS = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]
@@ -149,9 +117,9 @@ def model_label(m: str) -> str:
     return MODEL_LABELS.get(m, m)
 
 
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
-# 1. PREPARAZIONE DEI DATI: CSV orario -> pannello giornaliero (una riga per stazione e giorno)
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+###########################
+# PREPARAZIONE DEI DATI: CSV orario -> pannello giornaliero (una riga per stazione e giorno)
+###########################
 
 def load_hourly() -> pd.DataFrame:
     """Legge il CSV orario. Le date compaiono in due formati diversi; tutto viene portato all'ora solare (+01:00)."""
@@ -165,10 +133,10 @@ def load_hourly() -> pd.DataFrame:
 
 def clean_hourly(df: pd.DataFrame) -> pd.DataFrame:
     """Scarta i valori non affidabili:
-      - valori negativi (incluso il codice di mancante -9999)
-      - valori oltre il limite fisico dell'inquinante
-      - sensori bloccati: >= 6 ore consecutive identiche e sopra il 99,9° percentile dell'inquinante
-      - serie stazione x inquinante x anno interamente a zero
+       valori negativi (incluso il codice di mancante -9999)
+       valori oltre il limite fisico dell'inquinante
+       sensori bloccati: >= 6 ore consecutive identiche e sopra il 99,9° percentile dell'inquinante
+       serie stazione x inquinante x anno interamente a zero
     """
     p999 = df[df.Valore >= 0].groupby("Inquinante").Valore.quantile(0.999)
 
@@ -213,7 +181,6 @@ def daily_means(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def run_prep():
-    """FASE 1."""
     print("Fase 1 – preparazione dei dati")
     daily = daily_means(clean_hourly(load_hourly()))
     CACHE.mkdir(exist_ok=True)
@@ -221,12 +188,9 @@ def run_prep():
     print(f"{len(daily):,} righe stazione-giorno -> {PANEL}")
 
 
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
-# 2. MODELLI
-#    Tutte le funzioni lavorano su log(1 + valore).
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-# ---- 2.1 utilità comuni ------------------------------------------------------------------------------------
+#################
+# MODELLI
+#################
 
 def holiday_flag(dates: pd.DatetimeIndex) -> np.ndarray:
     """1 nei giorni festivi nazionali italiani e il 31 dicembre (fuochi d'artificio), 0 altrimenti."""
@@ -250,7 +214,7 @@ def station_series(panel: pd.DataFrame, station: str, col: str) -> pd.Series:
     return np.log1p(s.reindex(idx))
 
 
-# ---- 2.2 ARIMA e SARIMAX ----------------------------------------------------------------------------------
+# ARIMA e SARIMAX
 
 def sarimax_exog(idx: pd.DatetimeIndex) -> pd.DataFrame:
     """Variabili esterne di SARIMAX: stagionalità annuale (Fourier, 2 armoniche) + festività."""
@@ -277,12 +241,7 @@ def fit_best_by_aic(y_train, orders, seasonal_orders, exog_train=None):
 
 
 def rolling_forecasts(res, y, exog_fn=None) -> pd.DataFrame:
-    """Previsioni a 1..H giorni da ogni giorno di origine del test, con i parametri stimati sul training.
-
-    Da ogni origine o si prevedono i giorni o+1..o+H usando solo i dati fino a o.
-    Ritorna una tabella data x orizzonte: la colonna h contiene, per ogni data, la previsione emessa h giorni prima.
-    L'ultima origine è TEST_END, quindi la tabella include anche i giorni dopo l'ultimo dato.
-    """
+    """Previsioni a 1..H giorni."""
     xe = exog_fn(pd.date_range(y.index[0], FC_END, freq="D")) if exog_fn else None
     out = {}
     for origin in pd.date_range(TRAIN_END - pd.Timedelta(days=H - 1), TEST_END, freq="D"):
@@ -308,7 +267,7 @@ def run_sarimax(y):
     return rolling_forecasts(res, y, sarimax_exog), f"SARIMAX{order}x{sorder} + Fourier(K=2) + festività"
 
 
-# ---- 2.3 Prophet ------------------------------------------------------------------------------------------
+# Prophet
 
 def new_prophet():
     m = Prophet(yearly_seasonality=True, weekly_seasonality=True, daily_seasonality=False)
@@ -317,9 +276,7 @@ def new_prophet():
 
 
 def run_prophet(y, dates):
-    """Prophet standard: trend + stagionalità + festività, nessuna informazione sui giorni recenti.
-    Per questo la previsione di un giorno è la stessa a qualunque orizzonte.
-    Ritorna anche le componenti stimate su un anno intero, per i grafici."""
+    """Prophet standard: trend + stagionalità + festività, nessuna informazione sui giorni recenti."""
     train = y[:TRAIN_END].dropna().rename("y").rename_axis("ds").reset_index()
     m = new_prophet().fit(train)
     fc = m.predict(pd.DataFrame({"ds": dates}))
@@ -329,8 +286,7 @@ def run_prophet(y, dates):
 
 
 def run_prophet_lags(y, dates, h=1):
-    """Prophet + due regressori: ultimo valore noto e media degli ultimi 7 giorni, entrambi fino a t-h.
-    Modello "diretto": per ogni orizzonte h si stima un modello diverso, con i regressori spostati di h giorni."""
+    """Prophet + due regressori: ultimo valore noto e media degli ultimi 7 giorni, entrambi fino a t-h."""
     y = y.reindex(pd.date_range(y.index[0], FC_END, freq="D"))
     df = pd.DataFrame({"y": y})
     df["lag1"] = y.ffill().shift(h)
@@ -344,19 +300,15 @@ def run_prophet_lags(y, dates, h=1):
     return pd.Series(fc.yhat.values, index=fc.ds).reindex(dates)
 
 
-# ---- 2.4 XGBoost ------------------------------------------------------------------------------------------
+# XGBoost
 
 def build_xgb_features(panel: pd.DataFrame, col: str, h: int = 1) -> pd.DataFrame:
-    """Tabella di training "globale": una riga per giorno e stazione (tutte le stazioni fisse, non solo le 4
-    di valutazione), con le sole informazioni disponibili fino al giorno t-h.
-
-    Feature del target stesso (y_*): valori ritardati, medie mobili a 7 e 30 giorni, ultimo valore osservato.
-      Ritardi: per h = 1 sono 1, 2, 3, 7, 14; per h > 1 partono da h (h, h+1, h+2) + 7 e 14 se più lontani.
-    Altri inquinanti (<inquinante>_lag<h>): il loro valore al giorno t-h.
-    Media regionale del target (reg_*): a t-h e t-h-1.
-    Calendario (giorno della settimana, giorno dell'anno, mese, festività): riferito al giorno previsto,
-      che è noto in anticipo.
-    """
+    """Tabella di training "globale": una riga per giorno e stazione.
+    Feature: valori ritardati, medie mobili a 7 e 30 giorni, ultimo valore osservato.
+    Ritardi: h, h+1, h+2, h+3, h+7, h+14.
+    Altri inquinanti: il loro valore al giorno t-h.
+    Media regionale del target: a t-h e t-h-1.
+    Calendario"""
     family = col.split("_")[0]  # "O3_MDA8" -> "O3"
     others = [p for p in XGB_OTHER_POLLUTANTS if p != family]
     lags = [h, h + 1, h + 2] + [lag for lag in (7, 14) if lag > h + 2]
@@ -417,12 +369,11 @@ def run_xgboost(panel: pd.DataFrame, col: str, eval_stations, h: int = 1):
     return test.set_index(["Stazione", "date"])["pred"], info, imp
 
 
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
-# 3. ESECUZIONE IN PARALLELO
-#    Due tipi di lavoro indipendenti, distribuiti su tutti i core:
-#      - una coppia (inquinante, stazione): baseline, ARIMA, SARIMAX, Prophet, Prophet + lag, h = 1..7
-#      - una coppia (inquinante, orizzonte): un modello XGBoost
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+##########################
+# ESECUZIONE IN PARALLELO
+# baseline, ARIMA, SARIMAX, Prophet, Prophet + lag, h = 1..7
+# un modello XGBoost
+##########################
 
 _PANEL = None  # pannello giornaliero, caricato una volta in ogni processo
 
@@ -436,11 +387,7 @@ def _init_worker():
 
 
 def series_job(job):
-    """Tutti i modelli per stazione di una coppia (inquinante, stazione), per gli orizzonti 1..H.
-
-    Ritorna una tabella lunga (date, h, una colonna per modello, Observed) in scala log, dal primo giorno di
-    test fino a FC_END (i giorni dopo TEST_END non hanno osservazione).
-    """
+    """Tutti i modelli per stazione di una coppia (inquinante, stazione), per gli orizzonti 1..H."""
     pol, st = job
     col = POLLUTANTS[pol]["col"]
     dates = pd.date_range(TEST_START, FC_END, freq="D")
@@ -474,9 +421,9 @@ def xgb_job(job):
     return pol, h, preds, info, imp
 
 
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
-# 4. VALUTAZIONE
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+##################
+# VALUTAZIONE
+##################
 
 def complete_cases(pred: pd.DataFrame, pol: str) -> pd.DataFrame:
     """Righe di un inquinante con osservazione valida e previsione di tutti i modelli (campione comune)."""
@@ -538,9 +485,8 @@ def next7_forecast(fwd: pd.DataFrame, pred_h: pd.DataFrame, pols) -> pd.DataFram
 
 
 def run_forecast(pols):
-    """FASE 2: stima tutti i modelli in parallelo, salva le previsioni e scrive il report."""
+    """stima tutti i modelli in parallelo."""
     print("Fase 2 – modelli di previsione")
-    panel = pd.read_parquet(PANEL)
     jobs = [(pol, st) for pol in pols for st in POLLUTANTS[pol]["stations"]]
     xjobs = [(pol, h) for pol in pols for h in range(1, H + 1)]
     print(f"{len(jobs)} serie (inquinante x stazione) + {len(xjobs)} modelli XGBoost (inquinante x orizzonte)...")
@@ -578,202 +524,13 @@ def run_forecast(pols):
     next7.to_parquet(OUT_NEXT7, index=False)
     imps.to_csv(OUT_IMP, index=False)
     pd.concat(comps).to_parquet(OUT_COMP, index=False)
-    write_report(pred_1, pred_h, next7, specs, xgb_info, imps, pols, panel)
 
 
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
-# 5. REPORT MARKDOWN (forecast_results.md)
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+#############
+# GRAFICI
+#############
 
-def it(v, digits: int = 2, sign: bool = False) -> str:
-    """Numero in formato italiano: virgola decimale, punto per le migliaia, "–" se mancante."""
-    if pd.isna(v):
-        return "–"
-    s = f"{v:+,.{digits}f}" if sign else f"{v:,.{digits}f}"
-    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
-    return s.replace("-", "−")
-
-
-def it_date(d) -> str:
-    """Es. "mar 28 ott"."""
-    d = pd.Timestamp(d)
-    return f"{IT_WEEKDAYS[d.dayofweek]} {d.day} {IT_MONTHS[d.month - 1]}"
-
-
-def md(df: pd.DataFrame, index: bool = True) -> str:
-    """Tabella markdown con i numeri allineati a destra."""
-    align = (["left"] if index else []) + ["right"] * df.shape[1]
-    return df.to_markdown(index=index, colalign=align, disable_numparse=True)
-
-
-def md_metrics(df: pd.DataFrame, digits: int) -> str:
-    """Tabella markdown di una tabella di metriche (output di evaluate)."""
-    df = df.rename(index=MODEL_LABELS).copy()
-    for c in df.columns:
-        if c == "Skill %":
-            df[c] = df[c].map(lambda v: it(v, 1, sign=True))
-        elif c in ("Precision", "Recall", "F1"):
-            df[c] = df[c].map(lambda v: it(v, 2))
-        else:
-            df[c] = df[c].map(lambda v: it(v, digits))
-    return md(df)
-
-
-def write_report(pred_1, pred_h, next7, specs, xgb_info, imps, pols, panel):
-    L = ["# Forecasting degli inquinanti – confronto tra modelli", "",
-         f"Previsione a un giorno (one-step-ahead). Training: fino al {TRAIN_END.date()} · "
-         f"Test: {TEST_START.date()} – {TEST_END.date()}. Per ogni inquinante le metriche sono calcolate solo sui "
-         "giorni-stazione in cui l'osservazione è valida e tutti i modelli hanno una previsione.", "",
-         "- **Skill %** = `1 − MAE_modello / MAE_persistenza`: miglioramento rispetto a \"domani = oggi\".",
-         "- **Precision / Recall / F1** riguardano i *superamenti* (giorni sopra la soglia dell'inquinante). "
-         "Precision = quota dei superamenti previsti che si sono verificati; recall = quota dei superamenti "
-         "osservati che sono stati previsti. \"–\" = non calcolabile (il modello non prevede mai un superamento, "
-         "oppure nel test non ce ne sono).",
-         f"- In fondo: errore per orizzonte da 1 a {H} giorni e previsione per i {H} giorni dopo l'ultimo dato.",
-         "- Spiegazione completa in [forecasting_explained.md](forecasting_explained.md).", ""]
-
-    # ---- sintesi tra inquinanti
-    L += ["## Sintesi: skill vs persistenza (%) per inquinante", "",
-          "Valori positivi = meglio della persistenza. Le 4 stazioni di ogni inquinante sono aggregate.", ""]
-    rows, setup = {}, []
-    for pol in pols:
-        cfg = POLLUTANTS[pol]
-        ev = complete_cases(pred_1, pol)
-        rows[pol] = evaluate(ev, cfg["thr"])["Skill %"]
-        n_ex = int((ev.Observed > cfg["thr"]).sum()) if cfg["thr"] else None
-        setup.append({"Inquinante": pol, "Target": "max media 8 h" if pol == "O3" else "media giornaliera",
-                      "Unità": cfg["unit"], "Soglia": cfg["thr"] if cfg["thr"] else "–",
-                      "Riferimento soglia": cfg["ref"], "Giorni-stazione": it(len(ev), 0),
-                      "Superamenti": n_ex if n_ex is not None else "–",
-                      "Media osservata": it(ev.Observed.mean(), 2)})
-    summary = pd.DataFrame(rows).T[MODELS].rename(columns=MODEL_LABELS)
-    L += [md(summary.map(lambda v: it(v, 1, sign=True))), "",
-          "## Impostazione per inquinante", "", md(pd.DataFrame(setup).astype(str), index=False), ""]
-
-    # ---- dettaglio per inquinante
-    for pol in pols:
-        cfg = POLLUTANTS[pol]
-        digits = 3 if pol == "CO" else 2
-        ev = complete_cases(pred_1, pol)
-        L += [f"## {pol}" + (" (massimo giornaliero della media mobile su 8 ore)" if pol == "O3" else ""), "",
-              f"Unità: {cfg['unit']}. Soglia superamenti: "
-              + (f"{cfg['thr']} {cfg['unit']} ({cfg['ref']})." if cfg["thr"] else f"nessuna ({cfg['ref']})."), "",
-              "### Complessivo (4 stazioni aggregate)", "",
-              md_metrics(evaluate(ev, cfg["thr"]).sort_values("MAE"), digits), "", "### Per stazione", ""]
-        for st in cfg["stations"]:
-            g = ev[ev.Stazione == st]
-            n_ex = f", superamenti osservati: {int((g.Observed > cfg['thr']).sum())}" if cfg["thr"] else ""
-            L += [f"#### {st} – {STATION_NAMES[st]}  (giorni di test: {len(g)}{n_ex})", "",
-                  md_metrics(evaluate(g, cfg["thr"]).sort_values("MAE"), digits), ""]
-        L += ["### Modelli selezionati", ""]
-        for st in cfg["stations"]:
-            L.append(f"- **{st}** ({STATION_NAMES[st]}): {specs[(pol, st)]['ARIMA']} · {specs[(pol, st)]['SARIMAX']}")
-        info = xgb_info[pol]
-        L += [f"- **XGBoost**: un modello globale su {info['n_stations']} stazioni fisse "
-              f"({it(info['n_rows'], 0)} righe di training), {info['n_trees']} alberi "
-              "(early stopping sugli ultimi 90 giorni di training)", "",
-              "### XGBoost – le 10 feature più importanti (gain)", "",
-              md(imps[(imps.Inquinante == pol) & (imps.h == 1)].head(10).set_index("feature")[["importance"]]
-                 .map(lambda v: it(v, 3))), ""]
-
-    L += horizon_report(pred_h, next7, imps, pols, panel)
-    L += ["## Note sui modelli", "",
-          "- **Prophet**: stagionalità annuale + settimanale + festività italiane (un modello per stazione).",
-          "- **Prophet + lag**: come sopra + regressori `ultimo valore osservato` e `media 7 giorni` (fino a t-1).",
-          "- **Feature XGBoost**: `y_*` = il target stesso (lag, medie mobili, ultimo valore osservato); "
-          "`reg_*` = media regionale del target; `<inquinante>_lag1` = altri inquinanti il giorno prima.", ""]
-    REPORT_MD.write_text("\n".join(L))
-    print(summary.round(1).to_string())
-    print(f"\nReport -> {REPORT_MD}")
-
-
-def horizon_report(pred_h, next7, imps, pols, panel) -> list:
-    """Sezioni del report sull'orizzonte 1..7 giorni e sulla previsione dopo l'ultimo dato."""
-    hcols = [f"h={h}" for h in range(1, H + 1)]
-    L = ["## Orizzonte di previsione da 1 a 7 giorni", "",
-         "Il giorno t viene previsto con i soli dati fino a t−h. **h = 1** è la previsione a un giorno delle "
-         "sezioni precedenti; **h = 7** è la previsione emessa una settimana prima.", "",
-         "- **Persistenza a h giorni**: ultimo valore noto al giorno t−h. **Seasonal naive**: valore di t−7 "
-         "(noto per ogni h ≤ 7).",
-         "- **ARIMA / SARIMAX**: stessi parametri della previsione a un giorno; da ogni origine si prevedono "
-         "ricorsivamente i 7 giorni successivi.",
-         "- **Prophet**: non usa i dati recenti, quindi la sua previsione è la stessa a ogni orizzonte.",
-         "- **Prophet + lag** e **XGBoost**: un modello *diretto* per ogni h, stimato con le feature spostate "
-         "di h giorni (es. per h = 7 il valore più recente usato è quello di t−7).",
-         "- Campione comune: giorni-stazione con osservazione valida e previsione a tutti gli orizzonti. "
-         "La skill è sempre rispetto alla persistenza **allo stesso orizzonte**.", ""]
-
-    # ---- sintesi
-    skill_h7, best_rows, tabs_all, n_all = {}, [], {}, {}
-    for pol in pols:
-        e, tabs = horizon_eval(pred_h, pol)
-        tabs_all[pol], n_all[pol] = tabs, int((e.h == 1).sum())
-        skill_h7[pol] = tabs[H]["Skill %"]
-        mae = pd.DataFrame({h: t.MAE for h, t in tabs.items()})
-        best_h7 = mae[H].idxmin()
-        digits = 3 if pol == "CO" else 2
-        best_rows.append({"Inquinante": pol, "Unità": POLLUTANTS[pol]["unit"],
-                          "MAE persistenza h=1": it(mae.loc["Persistence", 1], digits),
-                          f"MAE persistenza h={H}": it(mae.loc["Persistence", H], digits),
-                          f"Migliore a h={H}": model_label(best_h7),
-                          f"MAE migliore h={H}": it(mae.loc[best_h7, H], digits),
-                          "MAE Prophet": it(mae.loc["Prophet", H], digits)})
-    L += [f"### Sintesi: skill vs persistenza a {H} giorni (%)", "",
-          md(pd.DataFrame(skill_h7).T[MODELS].rename(columns=MODEL_LABELS).map(lambda v: it(v, 1, sign=True))),
-          "", "### Sintesi: errore a 1 e a 7 giorni", "",
-          md(pd.DataFrame(best_rows).astype(str), index=False), ""]
-
-    # ---- dettaglio per inquinante
-    for pol in pols:
-        tabs, cfg = tabs_all[pol], POLLUTANTS[pol]
-        digits = 3 if pol == "CO" else 2
-        mae = pd.DataFrame({f"h={h}": t.MAE for h, t in tabs.items()}).rename(index=MODEL_LABELS)
-        sk = pd.DataFrame({f"h={h}": t["Skill %"] for h, t in tabs.items()}).rename(index=MODEL_LABELS)
-        L += [f"### {pol} – errore per orizzonte", "",
-              f"MAE ({cfg['unit']}); {it(n_all[pol], 0)} giorni-stazione per ogni orizzonte.", "",
-              md(mae[hcols].map(lambda v: it(v, digits))), "", "Skill vs persistenza (%)", "",
-              md(sk.drop(index=MODEL_LABELS["Persistence"])[hcols].map(lambda v: it(v, 1, sign=True))), ""]
-        if cfg["thr"] is not None and tabs[1].F1.notna().any():
-            f1 = pd.DataFrame({f"h={h}": t.F1 for h, t in tabs.items()}).rename(index=MODEL_LABELS)
-            L += [f"F1 sui superamenti (> {cfg['thr']} {cfg['unit']})", "", md(f1[hcols].map(lambda v: it(v, 2))), ""]
-        top = imps[(imps.Inquinante == pol) & (imps.h == H)].head(5)
-        L += [f"XGBoost a {H} giorni – le 5 feature più importanti: "
-              + ", ".join(f"`{f}` ({it(v, 3)})" for f, v in zip(top.feature, top.importance)), ""]
-
-    # ---- previsione operativa
-    L += [f"## Previsione per i 7 giorni dopo l'ultimo dato ({it_date(TEST_END + pd.Timedelta(days=1))} – "
-          f"{it_date(FC_END)} {FC_END.year})", "",
-          f"Emessa con i dati fino al {TEST_END.date()}. Per ogni inquinante si usa il modello con il MAE medio "
-          "(h = 1..7) più basso nel periodo di test. Tra parentesi l'intervallo empirico all'80%: 10° e 90° "
-          "percentile degli errori di test a quell'orizzonte (in scala log, 4 stazioni insieme). L'intervallo "
-          "è tarato sul 2026, quindi la copertura dell'80% vale in media su quel periodo, non per ogni giorno.", ""]
-    for pol in pols:
-        cfg = POLLUTANTS[pol]
-        digits = {"CO": 2, "SO2": 1, "C6H6": 1}.get(pol, 0)
-        f = next7[next7.Inquinante == pol]
-        best = f.Modello.iloc[0]
-        tab = {}
-        for st in cfg["stations"]:
-            s = (panel[(panel.Stazione == st) & (panel.date <= TEST_END)].dropna(subset=[cfg["col"]])
-                 .sort_values("date"))
-            last = s.iloc[-1] if len(s) else None
-            col = {"ultimo dato": (f"{it(last[cfg['col']], digits)} ({last.date.day}/{last.date.month})"
-                                   if last is not None else "–")}
-            for _, r in f[f.Stazione == st].sort_values("date").iterrows():
-                col[it_date(r.date)] = f"{it(r.Previsione, digits)} ({it(r.Basso80, digits)}–{it(r.Alto80, digits)})"
-            tab[STATION_NAMES[st]] = col
-        thr = f", soglia {cfg['thr']}" if cfg["thr"] else ""
-        L += [f"### {pol} – modello: {model_label(best)} ({cfg['unit']}{thr})", "", md(pd.DataFrame(tab)), ""]
-    return L
-
-
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
-# 6. GRAFICI (figures/*.png)
-#    01–10: caso di studio PM10 · 11–14: confronto tra inquinanti · 15–18: orizzonte 1–7 giorni e previsione
-#    Ogni figura è una funzione fig_XX(d); d contiene i dati letti da cache/ (vedi load_plot_data).
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-# ---- palette e stile
+# palette e stile
 SURFACE, INK, INK2, MUTED = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
 GRID, AXIS = "#e1e0d9", "#c3c2b7"
 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
@@ -802,7 +559,7 @@ def setup_matplotlib():
     })
 
 
-# ---- piccoli aiuti per i grafici
+# piccoli aiuti per i grafici
 
 def save(fig, name):
     fig.savefig(FIG_DIR / name, dpi=150, bbox_inches="tight")
@@ -868,7 +625,7 @@ def load_plot_data():
     return d
 
 
-# ---- 01–10: caso di studio PM10 ---------------------------------------------------------------------------
+# 01–10: caso di studio PM10
 
 def fig01_data_train_test(d):
     fig, axes = plt.subplots(4, 1, figsize=(11, 9), sharex=True)
@@ -1100,7 +857,7 @@ def fig10_xgboost_importance(d):
     save(fig, "10_xgboost_feature_importance.png")
 
 
-# ---- 11–14: confronto tra inquinanti ----------------------------------------------------------------------
+# 11–14: confronto tra inquinanti
 
 def fig11_skill_heatmap(d):
     cols = [m for m in MODELS if m != "Persistence"]
@@ -1238,7 +995,7 @@ def fig14_exceedances(d):
     save(fig, "14_exceedances_pollutants.png")
 
 
-# ---- 15–18: orizzonte da 1 a 7 giorni e previsione dopo l'ultimo dato ---------------------------------------
+# 15–18: orizzonte da 1 a 7 giorni e previsione dopo l'ultimo dato
 
 H_MODELS = ["Persistence", "SARIMAX", "Prophet", "XGBoost"]
 HORIZON_COLOR = {1: "#104281", 3: "#2a78d6", 7: "#86b6ef"}  # rampa di blu: più chiaro = orizzonte più lungo
@@ -1257,7 +1014,7 @@ def fig15_mae_by_horizon(d):
         ax.set_xticks(hs)
         ax.set_title(f"{POL_LABEL.get(pol, pol)} ({POLLUTANTS[pol]['unit']})")
         if pol == "SO2":  # Prophet è molto peggiore degli altri: lo si lascia fuori scala per leggere il resto
-            ax.annotate(f"Prophet: MAE {it(mae_h['Prophet'].max(), 2)}\n(fuori scala)", xy=(0.97, 0.97),
+            ax.annotate(f"Prophet: MAE {mae_h['Prophet'].max():.2f}".replace(".", ",") + "\n(fuori scala)", xy=(0.97, 0.97),
                         xycoords="axes fraction", ha="right", va="top", fontsize=8, color=INK2)
             ax.set_ylim(0, max(mae_h[m].max() for m in H_MODELS if m != "Prophet") * 1.25)
     for ax in axes[-1]:
@@ -1378,15 +1135,15 @@ def run_plots():
         make_figure(d)
 
 
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
-# 7. AVVIO DA RIGA DI COMANDO
-# ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+##############################
+# AVVIO DA RIGA DI COMANDO
+##############################
 
 STEPS = ["prep", "forecast", "plots"]
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Previsione della qualità dell'aria in Campania (vedi docstring).")
+    parser = argparse.ArgumentParser(description="Previsione della qualità dell'aria in Campania.")
     parser.add_argument("steps", nargs="*", metavar="fase",
                         help=f"fasi da eseguire, in ordine: {', '.join(STEPS)} (default: tutte)")
     parser.add_argument("--pollutants", nargs="+", default=list(POLLUTANTS), metavar="INQ",
