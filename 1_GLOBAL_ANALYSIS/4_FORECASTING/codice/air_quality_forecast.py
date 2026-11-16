@@ -485,8 +485,9 @@ def next7_forecast(fwd: pd.DataFrame, pred_h: pd.DataFrame, pols) -> pd.DataFram
 
 
 def run_forecast(pols):
-    """stima tutti i modelli in parallelo."""
+    """stima tutti i modelli in parallelo e scrive il report."""
     print("Fase 2 – modelli di previsione")
+    panel = pd.read_parquet(PANEL)
     jobs = [(pol, st) for pol in pols for st in POLLUTANTS[pol]["stations"]]
     xjobs = [(pol, h) for pol in pols for h in range(1, H + 1)]
     print(f"{len(jobs)} serie (inquinante x stazione) + {len(xjobs)} modelli XGBoost (inquinante x orizzonte)...")
@@ -524,6 +525,192 @@ def run_forecast(pols):
     next7.to_parquet(OUT_NEXT7, index=False)
     imps.to_csv(OUT_IMP, index=False)
     pd.concat(comps).to_parquet(OUT_COMP, index=False)
+    write_report(pred_1, pred_h, next7, specs, xgb_info, imps, pols, panel)
+
+
+#############################
+# REPORT MARKDOWN (forecast_results.md)
+#############################
+
+def it(v, digits: int = 2, sign: bool = False) -> str:
+    """Numero in formato italiano, "–" se mancante."""
+    if pd.isna(v):
+        return "–"
+    s = f"{v:+,.{digits}f}" if sign else f"{v:,.{digits}f}"
+    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+    return s.replace("-", "−")
+
+
+def it_date(d) -> str:
+    """Es. "mar 28 ott"."""
+    d = pd.Timestamp(d)
+    return f"{IT_WEEKDAYS[d.dayofweek]} {d.day} {IT_MONTHS[d.month - 1]}"
+
+
+def md(df: pd.DataFrame, index: bool = True) -> str:
+    """Tabella markdown con i numeri allineati a destra."""
+    align = (["left"] if index else []) + ["right"] * df.shape[1]
+    return df.to_markdown(index=index, colalign=align, disable_numparse=True)
+
+
+def md_metrics(df: pd.DataFrame, digits: int) -> str:
+    """Tabella markdown di una tabella di metriche."""
+    df = df.rename(index=MODEL_LABELS).copy()
+    for c in df.columns:
+        if c == "Skill %":
+            df[c] = df[c].map(lambda v: it(v, 1, sign=True))
+        elif c in ("Precision", "Recall", "F1"):
+            df[c] = df[c].map(lambda v: it(v, 2))
+        else:
+            df[c] = df[c].map(lambda v: it(v, digits))
+    return md(df)
+
+
+def write_report(pred_1, pred_h, next7, specs, xgb_info, imps, pols, panel):
+    L = ["# Forecasting degli inquinanti – confronto tra modelli", "",
+         f"Previsione a un giorno (one-step-ahead). Training: fino al {TRAIN_END.date()} · "
+         f"Test: {TEST_START.date()} – {TEST_END.date()}. Per ogni inquinante le metriche sono calcolate solo sui "
+         "giorni-stazione in cui l'osservazione è valida e tutti i modelli hanno una previsione.", "",
+         "- **Skill %** = `1 − MAE_modello / MAE_persistenza`: miglioramento rispetto a \"domani = oggi\".",
+         "- **Precision / Recall / F1** riguardano i *superamenti* (giorni sopra la soglia dell'inquinante). "
+         "Precision = quota dei superamenti previsti che si sono verificati; recall = quota dei superamenti "
+         "osservati che sono stati previsti. \"–\" = non calcolabile (il modello non prevede mai un superamento, "
+         "oppure nel test non ce ne sono).",
+         f"- In fondo: errore per orizzonte da 1 a {H} giorni e previsione per i {H} giorni dopo l'ultimo dato.", ""]
+
+    # sintesi tra inquinanti
+    L += ["## Sintesi: skill vs persistenza (%) per inquinante", "",
+          "Valori positivi = meglio della persistenza. Le 4 stazioni di ogni inquinante sono aggregate.", ""]
+    rows, setup = {}, []
+    for pol in pols:
+        cfg = POLLUTANTS[pol]
+        ev = complete_cases(pred_1, pol)
+        rows[pol] = evaluate(ev, cfg["thr"])["Skill %"]
+        n_ex = int((ev.Observed > cfg["thr"]).sum()) if cfg["thr"] else None
+        setup.append({"Inquinante": pol, "Target": "max media 8 h" if pol == "O3" else "media giornaliera",
+                      "Unità": cfg["unit"], "Soglia": cfg["thr"] if cfg["thr"] else "–",
+                      "Riferimento soglia": cfg["ref"], "Giorni-stazione": it(len(ev), 0),
+                      "Superamenti": n_ex if n_ex is not None else "–",
+                      "Media osservata": it(ev.Observed.mean(), 2)})
+    summary = pd.DataFrame(rows).T[MODELS].rename(columns=MODEL_LABELS)
+    L += [md(summary.map(lambda v: it(v, 1, sign=True))), "",
+          "## Impostazione per inquinante", "", md(pd.DataFrame(setup).astype(str), index=False), ""]
+
+    # dettaglio per inquinante
+    for pol in pols:
+        cfg = POLLUTANTS[pol]
+        digits = 3 if pol == "CO" else 2
+        ev = complete_cases(pred_1, pol)
+        L += [f"## {pol}" + (" (massimo giornaliero della media mobile su 8 ore)" if pol == "O3" else ""), "",
+              f"Unità: {cfg['unit']}. Soglia superamenti: "
+              + (f"{cfg['thr']} {cfg['unit']} ({cfg['ref']})." if cfg["thr"] else f"nessuna ({cfg['ref']})."), "",
+              "### Complessivo (4 stazioni aggregate)", "",
+              md_metrics(evaluate(ev, cfg["thr"]).sort_values("MAE"), digits), "", "### Per stazione", ""]
+        for st in cfg["stations"]:
+            g = ev[ev.Stazione == st]
+            n_ex = f", superamenti osservati: {int((g.Observed > cfg['thr']).sum())}" if cfg["thr"] else ""
+            L += [f"#### {st} – {STATION_NAMES[st]}  (giorni di test: {len(g)}{n_ex})", "",
+                  md_metrics(evaluate(g, cfg["thr"]).sort_values("MAE"), digits), ""]
+        L += ["### Modelli selezionati", ""]
+        for st in cfg["stations"]:
+            L.append(f"- **{st}** ({STATION_NAMES[st]}): {specs[(pol, st)]['ARIMA']} · {specs[(pol, st)]['SARIMAX']}")
+        info = xgb_info[pol]
+        L += [f"- **XGBoost**: un modello globale su {info['n_stations']} stazioni fisse "
+              f"({it(info['n_rows'], 0)} righe di training), {info['n_trees']} alberi "
+              "(early stopping sugli ultimi 90 giorni di training)", "",
+              "### XGBoost – le 10 feature più importanti (gain)", "",
+              md(imps[(imps.Inquinante == pol) & (imps.h == 1)].head(10).set_index("feature")[["importance"]]
+                 .map(lambda v: it(v, 3))), ""]
+
+    L += horizon_report(pred_h, next7, imps, pols, panel)
+    L += ["## Note sui modelli", "",
+          "- **Prophet**: stagionalità annuale + settimanale + festività italiane (un modello per stazione).",
+          "- **Prophet + lag**: come sopra + regressori `ultimo valore osservato` e `media 7 giorni` (fino a t-1).",
+          "- **Feature XGBoost**: `y_*` = il target stesso (lag, medie mobili, ultimo valore osservato); "
+          "`reg_*` = media regionale del target; `<inquinante>_lag1` = altri inquinanti il giorno prima.", ""]
+    REPORT_MD.write_text("\n".join(L))
+    print(summary.round(1).to_string())
+    print(f"\nReport -> {REPORT_MD}")
+
+
+def horizon_report(pred_h, next7, imps, pols, panel) -> list:
+    """Sezioni su orizzonte 1..7 giorni e previsione dopo l'ultimo dato."""
+    hcols = [f"h={h}" for h in range(1, H + 1)]
+    L = ["## Orizzonte di previsione da 1 a 7 giorni", "",
+         "Il giorno t viene previsto con i soli dati fino a t−h. **h = 1** è la previsione a un giorno delle "
+         "sezioni precedenti; **h = 7** è la previsione emessa una settimana prima.", "",
+         "- **Persistenza a h giorni**: ultimo valore noto al giorno t−h. **Seasonal naive**: valore di t−7 "
+         "(noto per ogni h ≤ 7).",
+         "- **ARIMA / SARIMAX**: stessi parametri della previsione a un giorno; da ogni origine si prevedono "
+         "ricorsivamente i 7 giorni successivi.",
+         "- **Prophet**: non usa i dati recenti, quindi la sua previsione è la stessa a ogni orizzonte.",
+         "- **Prophet + lag** e **XGBoost**: un modello *diretto* per ogni h, stimato con le feature spostate "
+         "di h giorni (es. per h = 7 il valore più recente usato è quello di t−7).",
+         "- Campione comune: giorni-stazione con osservazione valida e previsione a tutti gli orizzonti. "
+         "La skill è sempre rispetto alla persistenza **allo stesso orizzonte**.", ""]
+
+    # sintesi
+    skill_h7, best_rows, tabs_all, n_all = {}, [], {}, {}
+    for pol in pols:
+        e, tabs = horizon_eval(pred_h, pol)
+        tabs_all[pol], n_all[pol] = tabs, int((e.h == 1).sum())
+        skill_h7[pol] = tabs[H]["Skill %"]
+        mae = pd.DataFrame({h: t.MAE for h, t in tabs.items()})
+        best_h7 = mae[H].idxmin()
+        digits = 3 if pol == "CO" else 2
+        best_rows.append({"Inquinante": pol, "Unità": POLLUTANTS[pol]["unit"],
+                          "MAE persistenza h=1": it(mae.loc["Persistence", 1], digits),
+                          f"MAE persistenza h={H}": it(mae.loc["Persistence", H], digits),
+                          f"Migliore a h={H}": model_label(best_h7),
+                          f"MAE migliore h={H}": it(mae.loc[best_h7, H], digits),
+                          "MAE Prophet": it(mae.loc["Prophet", H], digits)})
+    L += [f"### Sintesi: skill vs persistenza a {H} giorni (%)", "",
+          md(pd.DataFrame(skill_h7).T[MODELS].rename(columns=MODEL_LABELS).map(lambda v: it(v, 1, sign=True))),
+          "", "### Sintesi: errore a 1 e a 7 giorni", "",
+          md(pd.DataFrame(best_rows).astype(str), index=False), ""]
+
+    # dettaglio per inquinante
+    for pol in pols:
+        tabs, cfg = tabs_all[pol], POLLUTANTS[pol]
+        digits = 3 if pol == "CO" else 2
+        mae = pd.DataFrame({f"h={h}": t.MAE for h, t in tabs.items()}).rename(index=MODEL_LABELS)
+        sk = pd.DataFrame({f"h={h}": t["Skill %"] for h, t in tabs.items()}).rename(index=MODEL_LABELS)
+        L += [f"### {pol} – errore per orizzonte", "",
+              f"MAE ({cfg['unit']}); {it(n_all[pol], 0)} giorni-stazione per ogni orizzonte.", "",
+              md(mae[hcols].map(lambda v: it(v, digits))), "", "Skill vs persistenza (%)", "",
+              md(sk.drop(index=MODEL_LABELS["Persistence"])[hcols].map(lambda v: it(v, 1, sign=True))), ""]
+        if cfg["thr"] is not None and tabs[1].F1.notna().any():
+            f1 = pd.DataFrame({f"h={h}": t.F1 for h, t in tabs.items()}).rename(index=MODEL_LABELS)
+            L += [f"F1 sui superamenti (> {cfg['thr']} {cfg['unit']})", "", md(f1[hcols].map(lambda v: it(v, 2))), ""]
+        top = imps[(imps.Inquinante == pol) & (imps.h == H)].head(5)
+        L += [f"XGBoost a {H} giorni – le 5 feature più importanti: "
+              + ", ".join(f"`{f}` ({it(v, 3)})" for f, v in zip(top.feature, top.importance)), ""]
+
+    # previsione operativa
+    L += [f"## Previsione per i 7 giorni dopo l'ultimo dato ({it_date(TEST_END + pd.Timedelta(days=1))} – "
+          f"{it_date(FC_END)} {FC_END.year})", "",
+          f"Emessa con i dati fino al {TEST_END.date()}. Per ogni inquinante si usa il modello con il MAE medio "
+          "(h = 1..7) più basso nel periodo di test. Tra parentesi l'intervallo empirico all'80%: 10° e 90° "
+          "percentile degli errori di test a quell'orizzonte (in scala log, 4 stazioni insieme). L'intervallo "
+          "è tarato sul 2026, quindi la copertura dell'80% vale in media su quel periodo, non per ogni giorno.", ""]
+    for pol in pols:
+        cfg = POLLUTANTS[pol]
+        digits = {"CO": 2, "SO2": 1, "C6H6": 1}.get(pol, 0)
+        f = next7[next7.Inquinante == pol]
+        best = f.Modello.iloc[0]
+        tab = {}
+        for st in cfg["stations"]:
+            s = (panel[(panel.Stazione == st) & (panel.date <= TEST_END)].dropna(subset=[cfg["col"]])
+                 .sort_values("date"))
+            last = s.iloc[-1] if len(s) else None
+            col = {"ultimo dato": (f"{it(last[cfg['col']], digits)} ({last.date.day}/{last.date.month})"
+                                   if last is not None else "–")}
+            for _, r in f[f.Stazione == st].sort_values("date").iterrows():
+                col[it_date(r.date)] = f"{it(r.Previsione, digits)} ({it(r.Basso80, digits)}–{it(r.Alto80, digits)})"
+            tab[STATION_NAMES[st]] = col
+        thr = f", soglia {cfg['thr']}" if cfg["thr"] else ""
+        L += [f"### {pol} – modello: {model_label(best)} ({cfg['unit']}{thr})", "", md(pd.DataFrame(tab)), ""]
+    return L
 
 
 #############

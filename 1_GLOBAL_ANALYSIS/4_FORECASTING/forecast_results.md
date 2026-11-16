@@ -5,7 +5,6 @@ Previsione a un giorno (one-step-ahead). Training: fino al 2025-12-31 · Test: 2
 - **Skill %** = `1 − MAE_modello / MAE_persistenza`: miglioramento rispetto a "domani = oggi".
 - **Precision / Recall / F1** riguardano i *superamenti* (giorni sopra la soglia dell'inquinante). Precision = quota dei superamenti previsti che si sono verificati; recall = quota dei superamenti osservati che sono stati previsti. "–" = non calcolabile (il modello non prevede mai un superamento, oppure nel test non ce ne sono).
 - In fondo: errore per orizzonte da 1 a 7 giorni e previsione per i 7 giorni dopo l'ultimo dato.
-- Spiegazione completa in [forecasting_explained.md](forecasting_explained.md).
 
 ## Sintesi: skill vs persistenza (%) per inquinante
 
