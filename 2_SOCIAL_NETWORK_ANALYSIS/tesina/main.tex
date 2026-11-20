@@ -1,0 +1,164 @@
+\documentclass[11pt]{report}
+
+% ==================== Lingua e caratteri ====================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[italian]{babel}
+\DeclareUnicodeCharacter{03BC}{\textmu}   % carattere μ (micro)
+\DeclareUnicodeCharacter{00B5}{\textmu}   % carattere µ (micro)
+
+% ==================== Titoli dei capitoli ====================
+\usepackage{titlesec}
+\titleformat{\chapter}
+  {\normalfont\LARGE\bfseries}{\thechapter}{1em}{}
+\titlespacing*{\chapter}{0pt}{3.5ex plus 1ex minus .2ex}{2.3ex plus .2ex}
+
+% ==================== Impaginazione e pacchetti ====================
+\usepackage{tabularx}
+\usepackage[margin=1.2in]{geometry}
+\usepackage[toc,page]{appendix}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{tikz}
+\usepackage{forest}
+\usetikzlibrary{trees, shapes.geometric, arrows.meta, positioning}
+\usepackage{verbatim}
+\usepackage{listings}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{xcolor}
+\usepackage{booktabs}     % \toprule, \midrule, \bottomrule
+\usepackage{siunitx}      % \SI, \num, unità di misura
+\sisetup{output-decimal-marker={,}, group-separator={.}, group-minimum-digits=4, per-mode=symbol}
+\usepackage{url}
+
+% ==================== Cartelle delle immagini ====================
+\graphicspath{{images/}{../1_DATASET_ANALYSIS/figures/}{../2_CENTRALITY_ANALYSIS/figures/}%
+              {../3_STRUCTURE_ANALYSIS/figures/}{../4_LINK_PREDICTION/figures/}}
+
+% ==================== Comandi del progetto ====================
+% Promemoria in rosso (da eliminare prima della consegna)
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[DA FARE:} #1\textbf{]}}}
+% Figura con riquadro rosso se l'immagine non esiste ancora
+\newcommand{\figura}[3]{%
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{../1_DATASET_ANALYSIS/figures/#1}{\includegraphics[width=0.9\textwidth]{#1}}{%
+      \fbox{\parbox[c][4cm][c]{0.8\textwidth}{\centering\textcolor{red}{Figura mancante: \texttt{\detokenize{#1}}}}}}
+    \caption{#2}
+    \label{#3}
+  \end{figure}}
+
+% ==================== Stili per il codice ====================
+\lstset{
+    basicstyle=\ttfamily\normalsize,
+    breaklines=true,
+    moredelim=[is][\color{red}\itshape]{|R|}{|R|}
+}
+\definecolor{custom_green}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{custom_blue}{rgb}{0.05, 0.05, 0.97}
+\definecolor{custom_brown}{rgb}{0.69, 0.38, 0.10}
+\definecolor{custom_purple}{rgb}{0.58, 0.00, 0.82}
+\definecolor{custom_orange}{rgb}{0.94, 0.59, 0.09}
+
+\lstdefinelanguage{Python}{
+    keywords={from, import, def, return, as, in, len, if, elif, else, for, while},
+    breakatwhitespace=false,
+    breaklines=true,
+    morecomment=[l]{\#},
+    morestring=[b]",
+    commentstyle=\color{red},
+    keywordstyle=\color{custom_purple},
+    stringstyle=\color{custom_green},
+    basicstyle=\ttfamily\footnotesize,
+    captionpos=b,
+    showstringspaces=false,
+    showtabs=false,
+    numbers=left,
+    numbersep=5pt,
+    numberstyle=\tiny\color{black},
+    rulecolor=\color{black},
+    tabsize=5,
+    title=\lstname,
+}
+
+% ============================================================
+\begin{document}
+\captionsetup[figure]{margin=1.5cm,font=small,labelfont={bf},name={Figura},labelsep=colon,textfont={it}}
+\captionsetup[table]{margin=1.5cm,font=small,labelfont={bf},name={Tabella},labelsep=colon,textfont={it}}
+
+% -------------------- Frontespizio --------------------
+\begin{titlepage}
+  \begin{center}
+    \LARGE {\scshape{Università Politecnica delle Marche}}\\[0.5cm]
+    \LARGE {\scshape{Ingegneria Informatica e dell'Automazione}}\\[0.7cm]
+    \linespread{1}
+    \huge {\bfseries GitHub Social Network Analysis}\\[1cm]
+    \linespread{1}
+    \includegraphics[width=5cm]{images/logoUnivpm.jpg}\\[0.5cm]
+    \linespread{1.2}
+    \Large Corso di\\
+    \Large {\scshape{DATA SCIENCE}} \\[0.3cm]
+    \Large {Anno accademico 2026-2027 \\[0.8cm]}
+    {\Large Studenti:}
+    \hfill {\Large Professore:}\\
+    {\Large TOYEM TEZEM RYAN PARFAIT}
+    \hfill
+    {\Large DOMENICO URSINO}\\
+    \raggedright{\Large SIMONE MURAZZO}\\
+    {\Large ANDREA SCALZI}
+    \hfill {\Large Dottorando:}\\
+    \raggedright{{\Large MAICOL LANNI}}
+    \hfill {\Large BURATTI CHRISTOPHER}\\
+
+    \paragraph{}
+    \centering{
+      \includegraphics[width=2cm]{images/dii_new.png}\\[0.3cm]
+      \large Dipartimento di Ingegneria dell'Informazione\\[0.3cm]
+    }
+  \end{center}
+\end{titlepage}
+
+\pagenumbering{arabic}
+\tableofcontents
+\newpage
+\pagestyle{plain}
+
+% -------------------- Capitoli --------------------
+% ============================================================
+%  CAPITOLO 1 - INTRODUZIONE
+%  
+% ============================================================
+\chapter{Introduzione}
+\label{cap:Introduzione}
+\cite{rozemberczki2021musae}
+% ============================================================
+%  CAPITOLO 2 - ANALISI DELL DATASET
+% ============================================================
+\chapter{Analisi del dataset}
+\label{cap:analisi_dataset}
+
+% ==================== CAPITOLO 3 - ANALISI DELLE MISURE DI CENTRALITÀ ====================
+\chapter{Analisi delle misure di centralità}
+
+% ==================== CAPITOLO 4 - VISUALIZZAZIONE E ANALISI DELLE STRUTTURE ====================
+\chapter{Visualizzazione e analisi delle strutture}
+
+% ==================== CAPITOLO 5 - Link Prediction nei Grafi ====================
+\chapter{Link Prediction nei Grafi}
+\label{cap:link_prediction}
+
+
+\chapter{CONCLUSIONI}
+
+% -------------------- Bibliografia --------------------
+\bibliographystyle{ieeetr}
+\bibliography{bibl}
+
+\end{document}
