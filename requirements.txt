@@ -10,3 +10,6 @@ pmdarima
 jupyter
 ipykernel
 pyarrow
+networkx
+python-igraph
+leidenalg

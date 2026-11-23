@@ -1,24 +1,42 @@
-﻿# Progetto 1 – Analisi della qualità dell'aria in Campania
+﻿# Progetto 2 – Social Network Analysis della rete di sviluppatori GitHub
 
-Analisi descrittiva, classificazione, clustering e forecasting sui dati orari
-di qualità dell'aria della rete di monitoraggio ARPA Campania.
+Analisi descrittiva, analisi delle misure di centralità, analisi delle strutture
+(k-core, clique, small-world, rich-club, community) e link prediction
+sulla rete sociale degli sviluppatori GitHub.
 
 ## Dati
-- **Fonte:** portale open data ARPAC, dataset "Dati RQA Orari Validati"
-  (https://dati.arpacampania.it/dataset/dati-rqa-giornalieri-validati)
-- **Licenza:** CC BY 4.0
-- **Periodo:** marzo 2023 – ottobre 2026 (file mensili, scaricati il 29/10/2026)
-- **Contenuto:** misure orarie di 7 inquinanti (PM10, PM2,5, NO2, O3, CO, SO2, C6H6)
-- I dati non sono inclusi nel repository (dimensione > 100 MB).
-  Il file concatenato va posizionato in data/raw/qualita_aria_campania_validati.csv.
+- **Fonte:** dataset "GitHub Social Network" (MUSAE), Rozemberczki, Allen, Sarkar,
+  *Multi-scale Attributed Node Embedding* (https://github.com/benedekrozemberczki/MUSAE),
+  disponibile anche su SNAP (https://snap.stanford.edu/data/github-social.html)
+- **Raccolta:** API pubblica di GitHub, giugno 2019
+- **Contenuto:**
+  - nodi = 37.700 sviluppatori con almeno 10 repository con stella;
+  - archi = 289.003 relazioni di *mutual follow* (grafo non orientato, non pesato, connesso);
+  - etichetta binaria `ml_target`: sviluppatore web (0) o machine learning (1);
+  - feature dei nodi: indici anonimizzati di località, repository con stella, datore di lavoro, e-mail.
+- I dati non sono inclusi nel repository. I file vanno posizionati in `data/raw/`:
+  `musae_git_edges.csv`, `musae_git_target.csv`, `musae_git_features.json`.
 
 ## Struttura
 | Cartella | Contenuto |
 |---|---|
-| 1_DATA_ANALYSIS/ | ETL e analisi descrittiva |
-| 2_CLASSIFICATION/ | Classificazione |
-| 3_CLUSTERING/ | Clustering delle stazioni |
-| 4_FORECASTING/ | Previsione delle serie temporali |
-| data/ | Dati grezzi e processati (esclusi da Git) |
+| 1_DATASET_ANALYSIS/ | Analisi descrittiva del dataset (in preparazione) |
+| 2_CENTRALITY_ANALYSIS/ | Misure di centralità: grado, closeness, betweenness, eigenvector, PageRank, Katz |
+| 3_STRUCTURE_ANALYSIS/ | Connettività, k-core, clique, small-world, rich-club, community detection, visualizzazione |
+| 4_LINK_PREDICTION/ | Link prediction (in preparazione) |
+| tesina/ | Relazione in LaTeX |
+| data/ | Dati grezzi (esclusi da Git) |
 
-Ogni cartella contiene codice/ (notebook) e igures/ (grafici).
+Ogni cartella di analisi contiene `codice/` (script), `figures/` (grafici) e un file `*_results.md`
+con le tabelle dei risultati. I risultati intermedi sono salvati in `cache/` (esclusa da Git).
+
+## Esecuzione
+Gli script si lanciano dalla rispettiva cartella `codice/`; il comando completo con le dipendenze
+è indicato nell'intestazione di ciascuno script, ad esempio:
+
+```
+uv run --python 3.12 --with python-igraph --with pandas --with pyarrow \
+        --with matplotlib --with scipy --with tabulate python centrality_analysis.py
+```
+
+L'opzione `--recompute` ricalcola i risultati anche se già presenti in `cache/`.

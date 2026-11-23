@@ -146,9 +146,927 @@
 
 % ==================== CAPITOLO 3 - ANALISI DELLE MISURE DI CENTRALITÀ ====================
 \chapter{Analisi delle misure di centralità}
+\label{cap:centralita}
+
+% ------------------------------------------------------------
+\section{Introduzione}
+\label{sec:ce_intro}
+
+Una misura di centralità assegna a ogni nodo un punteggio che ne quantifica
+l'importanza nella rete. ``Importanza'' però può significare cose diverse: avere
+molti contatti, essere vicini a tutti gli altri nodi, trovarsi sui percorsi che
+collegano zone diverse della rete, oppure essere collegati a nodi a loro volta
+importanti. Per questo motivo in questo capitolo si calcolano e si confrontano sei
+misure di centralità sulla rete di sviluppatori GitHub, cercando di rispondere a
+quattro domande:
+\begin{enumerate}
+  \item quanto è concentrata la centralità, cioè se pochi nodi dominano la rete;
+  \item chi sono i nodi più centrali e se le diverse misure concordano;
+  \item se gli sviluppatori web e quelli di machine learning (ML) occupano
+        posizioni diverse nella rete;
+  \item quanto la connettività della rete dipende dai nodi più centrali.
+\end{enumerate}
+
+\subsection{Librerie utilizzate}
+{\sloppy Tutto il codice è contenuto nello script Python
+\texttt{centrality\_analysis.py} (cartella \texttt{2\_CENTRALITY\_ANALYSIS/codice}),
+che utilizza le seguenti librerie:\par}
+\begin{itemize}
+  \item \textbf{python-igraph}: rappresentazione del grafo e calcolo delle misure
+        di centralità; il nucleo della libreria è scritto in C ed è molto più
+        veloce di NetworkX sulle misure basate sui cammini minimi;
+  \item \textbf{SciPy}: autovalore dominante della matrice di adiacenza, sistema
+        lineare della centralità di Katz e test statistici;
+  \item \textbf{pandas} e \textbf{NumPy}: gestione dei risultati;
+  \item \textbf{Matplotlib}: realizzazione dei grafici.
+\end{itemize}
+Le centralità calcolate vengono salvate nella cartella \texttt{cache}, così da non
+doverle ricalcolare a ogni esecuzione. Le tabelle complete sono raccolte nel file
+\texttt{centrality\_results.md}, prodotto dallo stesso script.
+
+% ------------------------------------------------------------
+\section{Le misure considerate}
+\label{sec:ce_misure}
+
+Il grafo $G=(V,E)$ è non orientato, non pesato e connesso, con $n=\num{37700}$
+nodi e $m=\num{289003}$ archi. Indichiamo con $k_i$ il grado del nodo $i$, con
+$d(i,j)$ la distanza (numero di archi del cammino minimo) tra $i$ e $j$ e con $A$
+la matrice di adiacenza. Le misure calcolate sono riportate nella
+Tabella~\ref{tab:ce_misure}.
+
+\begin{table}[H]
+  \centering
+  \caption{Misure di centralità calcolate.}
+  \label{tab:ce_misure}
+  \small
+  \begin{tabularx}{\textwidth}{@{}l >{\raggedright\arraybackslash}p{5.2cm} >{\raggedright\arraybackslash}X@{}}
+    \toprule
+    \textbf{Misura} & \textbf{Definizione} & \textbf{Significato} \\
+    \midrule
+    Grado & $C_D(i)=\dfrac{k_i}{n-1}$ & Numero di contatti diretti \\
+    \addlinespace
+    Closeness & $C_C(i)=\dfrac{n-1}{\sum_{j\neq i} d(i,j)}$ & Vicinanza media a tutti gli altri nodi \\
+    \addlinespace
+    Betweenness & $C_B(i)=\dfrac{2}{(n-1)(n-2)}\displaystyle\sum_{s\neq i\neq t}\frac{\sigma_{st}(i)}{\sigma_{st}}$ & Frazione dei cammini minimi che passano per $i$ ($\sigma_{st}$ = numero di cammini minimi tra $s$ e $t$, $\sigma_{st}(i)$ = quelli che passano per $i$) \\
+    \addlinespace
+    Eigenvector & $\lambda_{\max}\, x = A x$ & Un nodo è importante se è collegato a nodi importanti \\
+    \addlinespace
+    PageRank & $x_i=\dfrac{1-d}{n}+d\displaystyle\sum_{j\in N(i)}\frac{x_j}{k_j}$, $d=0{,}85$ & Probabilità di trovarsi su $i$ con una passeggiata casuale con ``teletrasporto'' \\
+    \addlinespace
+    Katz & $x=\alpha A x+\beta\mathbf{1}$ & Conta tutti i cammini che arrivano in $i$, pesando con $\alpha^{\ell}$ quelli di lunghezza $\ell$ \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Le misure si possono raggruppare in tre famiglie:
+\begin{itemize}
+  \item \textbf{locali}: il grado, che guarda solo ai vicini diretti;
+  \item \textbf{basate sulle distanze}: closeness e betweenness, che richiedono i
+        cammini minimi tra tutte le coppie di nodi;
+  \item \textbf{spettrali}: eigenvector, PageRank e Katz, in cui l'importanza di
+        un nodo dipende ricorsivamente da quella dei vicini.
+\end{itemize}
+
+\subsection{Dettagli di calcolo}
+Tutte le misure sono calcolate in modo \textbf{esatto} sull'intero grafo. Poiché il
+grafo è connesso (Capitolo~\ref{cap:analisi_dataset}), la closeness è ben definita
+per tutti i nodi e non è necessario restringersi alla componente gigante.
+
+La betweenness si calcola con l'algoritmo di Brandes, che richiede una visita in
+ampiezza da ogni nodo: il costo è $O(nm)$, circa tre minuti su un singolo core. Per
+ridurre il tempo, i nodi sorgente sono stati suddivisi in blocchi elaborati in
+parallelo; la somma dei contributi dei blocchi coincide con la betweenness esatta.
+La closeness è stata parallelizzata allo stesso modo. Con 18 processi il calcolo
+completo richiede circa un minuto.
+
+Per la centralità di Katz il parametro $\alpha$ deve essere minore di
+$1/\lambda_{\max}$, dove $\lambda_{\max}$ è l'autovalore dominante di $A$, altrimenti
+la serie dei cammini diverge. Si è ottenuto $\lambda_{\max}=\num{148.79}$ e si è
+scelto $\alpha=0{,}85/\lambda_{\max}=\num{0.00571}$, con $\beta=1$. Il vettore $x$
+si ottiene risolvendo il sistema lineare sparso $(I-\alpha A)x=\beta\mathbf{1}$ con
+il metodo del gradiente coniugato, applicabile perché la matrice è simmetrica e
+definita positiva. La fattorizzazione LU diretta si è rivelata impraticabile: i
+nodi con migliaia di vicini producono un riempimento (\emph{fill-in}) della
+matrice tale da esaurire la memoria.
+
+% ------------------------------------------------------------
+\section{Distribuzione delle misure}
+\label{sec:ce_distribuzioni}
+
+La Tabella~\ref{tab:ce_statistiche} riassume le distribuzioni delle sei misure. Il
+\textbf{coefficiente di Gini} misura quanto la centralità è distribuita in modo
+diseguale tra i nodi: vale 0 se tutti i nodi hanno lo stesso valore e tende a 1 se
+la centralità è concentrata su un solo nodo.
+
+\begin{table}[H]
+  \centering
+  \caption{Statistiche delle misure di centralità.}
+  \label{tab:ce_statistiche}
+  \small
+  \begin{tabular}{@{}lrrrrr@{}}
+    \toprule
+    \textbf{Misura} & \textbf{Mediana} & \textbf{Massimo} & \textbf{Max/Mediana} & \textbf{Gini} & \textbf{Asimmetria} \\
+    \midrule
+    Grado       & \num{1.59e-4} & \num{0.251}  & \num{1576}     & \num{0.688} & \num{67.8} \\
+    Closeness   & \num{0.311}   & \num{0.523}  & \num{1.68}     & \num{0.074} & \num{-0.22} \\
+    Betweenness & \num{1.53e-6} & \num{0.270}  & \num{1.76e5}   & \num{0.926} & \num{121.3} \\
+    Eigenvector & \num{3.05e-3} & \num{1}      & \num{328}      & \num{0.636} & \num{25.6} \\
+    PageRank    & \num{1.30e-5} & \num{0.0169} & \num{1301}     & \num{0.572} & \num{78.5} \\
+    Katz        & \num{2.47e-3} & \num{0.325}  & \num{132}      & \num{0.338} & \num{31.1} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../2_CENTRALITY_ANALYSIS/figures/01_ccdf_centralita.png}
+  \caption{Funzione di distribuzione complementare (CCDF) delle sei misure, per
+  l'intera rete e separatamente per sviluppatori web e ML. Scala logaritmica
+  (lineare sull'asse delle ascisse per la closeness).}
+  \label{fig:ce_ccdf}
+\end{figure}
+
+La Figura~\ref{fig:ce_ccdf} e la Tabella~\ref{tab:ce_statistiche} mostrano due
+comportamenti molto diversi.
+\begin{itemize}
+  \item \textbf{Grado, betweenness, PageRank ed eigenvector} hanno distribuzioni a
+        coda pesante, quasi rettilinee in scala log-log, ereditate dalla
+        distribuzione dei gradi. La betweenness è la più estrema: il nodo più
+        centrale ha un valore \num{176000} volte la mediana, il Gini è
+        \num{0.93} e il \SI{17}{\percent} dei nodi ha betweenness nulla, cioè non
+        si trova su nessun cammino minimo tra altri due nodi (sono soprattutto i
+        nodi di grado 1).
+  \item \textbf{La closeness} è invece quasi uniforme (Gini \num{0.07}): il
+        massimo è appena \num{1.7} volte la mediana. In una rete in cui la distanza
+        media è di circa 3,3 passi, anche un nodo periferico raggiunge tutti gli
+        altri in pochi passi, e la closeness distingue poco tra i nodi.
+\end{itemize}
+
+\subsection{Centralizzazione}
+La \textbf{centralizzazione di Freeman} misura quanto l'intera rete è organizzata
+attorno a un singolo nodo:
+\[
+  C_X = \frac{\sum_i \left[C_X(i^*) - C_X(i)\right]}{\max_{G'} \sum_i \left[C_X(i^*) - C_X(i)\right]},
+\]
+dove $i^*$ è il nodo più centrale e il denominatore è il valore raggiunto dal grafo
+a stella con lo stesso numero di nodi, che è il grafo più centralizzato possibile.
+Vale quindi 1 per una stella e 0 per un grafo in cui tutti i nodi sono
+equivalenti. Si ottiene $C_D=\num{0.25}$ per il grado, $C_B=\num{0.27}$ per la
+betweenness e $C_C=\num{0.42}$ per la closeness. Valori di questo ordine sono alti
+per una rete di quasi \num{38000} nodi: un solo sviluppatore,
+\texttt{dalinhuang99}, è collegato al \SI{25}{\percent} della rete e si trova sul
+\SI{27}{\percent} dei cammini minimi.
+
+% ------------------------------------------------------------
+\section{I nodi più centrali}
+\label{sec:ce_top}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../2_CENTRALITY_ANALYSIS/figures/02_top10_per_misura.png}
+  \caption{I dieci sviluppatori più centrali secondo ciascuna misura. Il colore
+  indica la classe; nessuno sviluppatore ML compare in queste classifiche.}
+  \label{fig:ce_top10}
+\end{figure}
+
+La Figura~\ref{fig:ce_top10} mostra che i vertici delle classifiche sono molto
+stabili: \texttt{dalinhuang99} (\num{9458} vicini) e \texttt{nfultz} (\num{7085})
+occupano le prime due posizioni per tutte le misure, e i primi sei nodi
+(\texttt{dalinhuang99}, \texttt{nfultz}, \texttt{addyosmani}, \texttt{Bunlong},
+\texttt{gabrielpconceicao}, \texttt{rfthusn}) sono gli stessi per tutte le misure
+tranne la closeness. Si tratta di \emph{hub} con migliaia di contatti, quasi tutti
+nodi periferici: il loro coefficiente di clustering è inferiore a \num{0.01}.
+
+Le differenze emergono scendendo nella classifica. Due esempi:
+\begin{itemize}
+  \item \texttt{nelsonic} è settimo per grado e per PageRank, ma solo 68\textsuperscript{o}
+        per closeness: ha molti contatti, ma la sua posizione è più lontana dal
+        nucleo della rete, quindi è un hub ``locale'';
+  \item \texttt{ajsb85} ha ``solo'' 905 vicini (28\textsuperscript{o} per grado)
+        ma è decimo per closeness: pur con meno contatti, si trova in una posizione
+        più vicina al nucleo della rete.
+\end{itemize}
+
+Nessuno sviluppatore ML compare tra i primi dieci di alcuna misura. Restringendo la
+classifica ai soli nodi ML, i più centrali sono \texttt{antirez} (967 vicini,
+21\textsuperscript{o} per PageRank nella classifica globale), \texttt{rasbt}
+(729 vicini, primo nodo ML per betweenness, 24\textsuperscript{o} globale),
+\texttt{bradfitz}, \texttt{amueller} e \texttt{sebastianruder}.
+
+% ------------------------------------------------------------
+\section{Confronto tra le misure}
+\label{sec:ce_correlazioni}
+
+Per confrontare le misure si usano due strumenti complementari:
+\begin{itemize}
+  \item la \textbf{correlazione di Spearman}, calcolata sui ranghi di tutti i nodi,
+        che misura l'accordo sull'intera classifica;
+  \item l'\textbf{indice di Jaccard} tra gli insiemi dei 100 nodi più centrali,
+        $J(A,B)=|A\cap B|/|A\cup B|$, che misura l'accordo sul vertice della
+        classifica, cioè sui nodi che di solito interessano.
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../2_CENTRALITY_ANALYSIS/figures/03_correlazioni_overlap.png}
+  \caption{A sinistra, correlazione di Spearman tra le misure; a destra, indice di
+  Jaccard tra i 100 nodi più centrali per ciascuna misura.}
+  \label{fig:ce_correlazioni}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../2_CENTRALITY_ANALYSIS/figures/04_scatter_coppie.png}
+  \caption{Relazione tra coppie di misure; ogni punto è uno sviluppatore. $\rho$ è
+  la correlazione di Spearman.}
+  \label{fig:ce_scatter}
+\end{figure}
+
+Le Figure~\ref{fig:ce_correlazioni} e~\ref{fig:ce_scatter} mostrano che le misure
+formano due gruppi.
+\begin{itemize}
+  \item \textbf{Grado, PageRank e betweenness}: Spearman tra \num{0.86} e
+        \num{0.97}. PageRank su un grafo non orientato è quasi proporzionale al
+        grado, a meno del termine di teletrasporto ($\rho=\num{0.97}$, Jaccard
+        \num{0.89}). Anche la betweenness segue da vicino il grado: un nodo con
+        molti vicini a basso grado è necessariamente sui cammini minimi tra di essi.
+  \item \textbf{Closeness, eigenvector e Katz}: Spearman tra \num{0.98} e
+        \num{0.999}. Eigenvector e Katz sono quasi identiche ($\rho=\num{0.999}$),
+        perché con $\alpha$ relativamente vicino a $1/\lambda_{\max}$ la centralità di Katz tende
+        all'autovettore dominante. Queste misure premiano la vicinanza al nucleo
+        della rete più che il numero di contatti.
+\end{itemize}
+Tra i due gruppi la correlazione scende a circa \num{0.65}--\num{0.77}, e la
+sovrapposizione minima tra i top-100 si ha tra closeness e PageRank (Jaccard
+\num{0.33}). Il grafico grado--betweenness della Figura~\ref{fig:ce_scatter} mostra
+inoltre che, a parità di grado, la betweenness varia di diversi ordini di grandezza:
+è il segnale della presenza di nodi \emph{ponte}.
+
+\subsection{Nodi ponte}
+Un nodo con betweenness alta rispetto al proprio grado collega zone della rete che
+altrimenti sarebbero lontane. Tra i primi 1000 nodi per betweenness, si sono
+cercati quelli che guadagnano più posizioni rispetto alla classifica per grado. Il
+caso più estremo è \texttt{artificialsoph}: ha solo 6 vicini (posizione
+\num{17063} per grado) ma è 821\textsuperscript{o} per betweenness. Ha
+clustering nullo, cioè nessuno dei suoi vicini è collegato agli altri, e
+\SI{83}{\percent} dei suoi vicini sono sviluppatori ML: è un punto di accesso
+dell'area ML al resto della rete. Gli altri nodi ponte hanno caratteristiche
+simili: grado tra 13 e 28, clustering basso e vicini di entrambe le classi.
+
+% ------------------------------------------------------------
+\section{Centralità e classe}
+\label{sec:ce_classe}
+
+Il dataset classifica ogni sviluppatore come web (\SI{74.2}{\percent}) o machine
+learning (\SI{25.8}{\percent}). Per verificare se le due classi occupano posizioni
+diverse nella rete, per ciascuna misura si è applicato il \textbf{test di
+Mann--Whitney U}, che non richiede ipotesi sulla forma delle distribuzioni. Oltre
+al p-value si riporta la statistica normalizzata
+$U/(n_{\text{web}}\,n_{\text{ML}})$, che stima la probabilità che uno sviluppatore
+web scelto a caso sia più centrale di uno ML scelto a caso: 0,5 indica nessuna
+differenza (Tabella~\ref{tab:ce_classe}).
+
+\begin{table}[H]
+  \centering
+  \caption{Centralità per classe. Il rapporto è calcolato tra le mediane.}
+  \label{tab:ce_classe}
+  \small
+  \begin{tabular}{@{}lrrrrr@{}}
+    \toprule
+    \textbf{Misura} & \textbf{Med.\ web} & \textbf{Med.\ ML} & \textbf{Rapporto} & \textbf{P(web $>$ ML)} & \textbf{ML top-100} \\
+    \midrule
+    Grado       & \num{1.59e-4} & \num{1.06e-4} & \num{1.50} & \num{0.61} & \SI{5}{\percent} \\
+    Closeness   & \num{0.319}   & \num{0.291}   & \num{1.10} & \num{0.66} & \SI{2}{\percent} \\
+    Betweenness & \num{2.04e-6} & \num{5.72e-7} & \num{3.56} & \num{0.57} & \SI{13}{\percent} \\
+    Eigenvector & \num{4.63e-3} & \num{8.03e-4} & \num{5.77} & \num{0.68} & \SI{2}{\percent} \\
+    PageRank    & \num{1.38e-5} & \num{1.10e-5} & \num{1.25} & \num{0.58} & \SI{10}{\percent} \\
+    Katz        & \num{2.90e-3} & \num{1.88e-3} & \num{1.54} & \num{0.67} & \SI{3}{\percent} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../2_CENTRALITY_ANALYSIS/figures/05_centralita_per_classe.png}
+  \caption{A sinistra, quota di sviluppatori ML tra i $k$ nodi più centrali al
+  variare di $k$ (la linea tratteggiata è la quota nell'intera rete); a destra,
+  probabilità che un nodo web sia più centrale di un nodo ML.}
+  \label{fig:ce_classe}
+\end{figure}
+
+Per tutte le misure gli sviluppatori web sono significativamente più centrali (i
+p-value sono tutti inferiori a $10^{-100}$). L'effetto però non è uniforme
+(Figura~\ref{fig:ce_classe}).
+\begin{itemize}
+  \item È massimo per \textbf{eigenvector, Katz e closeness} (probabilità
+        \num{0.67}--\num{0.68}): le misure che premiano la vicinanza al nucleo
+        della rete penalizzano gli sviluppatori ML, che formano un'area propria e
+        periferica. Tra i primi 100 nodi per eigenvector gli sviluppatori ML sono
+        solo il \SI{2}{\percent}, contro il \SI{25.8}{\percent} della rete.
+  \item È minimo per \textbf{betweenness e PageRank} (\num{0.57}--\num{0.58}). In
+        particolare la betweenness è la misura in cui gli sviluppatori ML sono più
+        rappresentati al vertice (\SI{13}{\percent} dei top-100,
+        \SI{20.5}{\percent} dei top-\num{5000}): i pochi nodi ML ben collegati
+        fanno da ponte tra l'area ML e il resto della rete, e attirano quindi
+        molti cammini minimi.
+\end{itemize}
+
+% ------------------------------------------------------------
+\section{Robustezza della rete}
+\label{sec:ce_robustezza}
+
+Un modo per verificare se le misure individuano davvero i nodi importanti è
+osservare cosa succede alla rete quando questi vengono rimossi. Per ciascuna misura
+si sono rimossi i nodi più centrali, dallo \SI{0.25}{\percent} al
+\SI{5}{\percent} del totale, misurando la dimensione della componente connessa
+più grande e il numero di componenti. L'ordine di rimozione è calcolato una sola
+volta sulla rete intatta. Come riferimento si è usata la rimozione di nodi scelti a
+caso.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../2_CENTRALITY_ANALYSIS/figures/06_robustezza_rimozione.png}
+  \caption{Effetto della rimozione dei nodi più centrali, confrontata con la
+  rimozione casuale. A sinistra, frazione dei nodi (sul totale iniziale) che resta
+  nella componente gigante; a destra, numero di componenti connesse.}
+  \label{fig:ce_robustezza}
+\end{figure}
+
+La Figura~\ref{fig:ce_robustezza} mostra il comportamento tipico delle reti con
+distribuzione dei gradi a coda pesante: \textbf{robuste ai guasti casuali, fragili
+agli attacchi mirati}.
+\begin{itemize}
+  \item Rimuovendo il \SI{5}{\percent} dei nodi a caso, la componente gigante
+        contiene ancora il \SI{94.1}{\percent} dei nodi: si perdono quasi
+        soltanto i nodi rimossi.
+  \item Rimuovendo lo stesso numero di nodi in ordine di betweenness, la
+        componente gigante scende al \SI{77.0}{\percent} e la rete si frammenta in
+        oltre \num{6000} componenti. Già la rimozione dello \SI{0.25}{\percent}
+        dei nodi (94 sviluppatori) stacca dalla rete circa \num{2000} componenti,
+        formate in gran parte dai nodi che erano collegati solo agli hub rimossi.
+  \item Le misure più efficaci sono betweenness, PageRank e grado; la closeness è
+        la meno efficace (\SI{85.4}{\percent} dopo il \SI{5}{\percent} di
+        rimozioni), perché premia i nodi vicini al nucleo, non quelli da cui
+        dipende la periferia.
+\end{itemize}
+
+% ------------------------------------------------------------
+\section{Visualizzazione dei nodi più centrali}
+\label{sec:ce_visualizzazione}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{../2_CENTRALITY_ANALYSIS/figures/07_sottografo_top_pagerank.png}
+  \caption{Sottografo indotto dai 300 nodi con PageRank più alto, disposto con
+  l'algoritmo di Fruchterman--Reingold. La dimensione dei nodi è proporzionale
+  alla betweenness, il colore indica la classe.}
+  \label{fig:ce_sottografo}
+\end{figure}
+
+La Figura~\ref{fig:ce_sottografo} mostra le relazioni tra i 300 nodi con PageRank
+più alto. I nodi sono tutti collegati tra loro (nessuno è isolato nel sottografo) e
+formano un nucleo denso di sviluppatori web, con i grandi hub al centro. I pochi
+sviluppatori ML presenti si raggruppano invece in un settore separato, ai margini
+del nucleo: anche al vertice della rete le due classi restano in gran parte
+distinte, come si vedrà con l'analisi delle community
+(Capitolo~\ref{cap:strutture}).
+
+% ------------------------------------------------------------
+\section{Conclusioni}
+\label{sec:ce_conclusioni}
+
+\begin{itemize}
+  \item La centralità è \textbf{fortemente concentrata}: pochi hub, in particolare
+        \texttt{dalinhuang99} e \texttt{nfultz}, occupano i primi posti di tutte le
+        classifiche e si trovano, rispettivamente, sul \SI{27}{\percent} e sul
+        \SI{24}{\percent} dei cammini minimi della rete.
+  \item Le misure sono molto correlate nel complesso, ma si dividono in due gruppi:
+        grado, PageRank e betweenness misurano il \emph{numero} di contatti;
+        closeness, eigenvector e Katz la \emph{posizione} rispetto al nucleo della
+        rete. La scelta della misura cambia soprattutto la parte alta della
+        classifica.
+  \item Gli \textbf{sviluppatori ML sono sistematicamente meno centrali} degli
+        sviluppatori web, soprattutto secondo le misure spettrali. Fa eccezione la
+        betweenness, che premia i nodi ML che fanno da ponte verso il resto della
+        rete.
+  \item La rete è \textbf{robusta ai guasti casuali ma fragile agli attacchi
+        mirati}: dopo la rimozione del \SI{5}{\percent} dei nodi più centrali la
+        componente gigante contiene circa il \SI{77}{\percent} dei nodi, contro
+        il \SI{94}{\percent} dopo una rimozione casuale.
+\end{itemize}
 
 % ==================== CAPITOLO 4 - VISUALIZZAZIONE E ANALISI DELLE STRUTTURE ====================
 \chapter{Visualizzazione e analisi delle strutture}
+\label{cap:strutture}
+
+% ------------------------------------------------------------
+\section{Introduzione}
+\label{sec:st_intro}
+
+Il capitolo precedente ha studiato l'importanza dei singoli nodi. Questo capitolo
+studia invece l'\textbf{organizzazione complessiva} della rete, a diverse scale:
+\begin{itemize}
+  \item i punti critici per la connettività (Sezione~\ref{sec:st_connettivita});
+  \item la struttura a strati nucleo--periferia, tramite la decomposizione
+        $k$-core (Sezione~\ref{sec:st_kcore});
+  \item i gruppi completamente connessi, cioè le clique (Sezione~\ref{sec:st_clique});
+  \item le proprietà \emph{small-world}, confrontando la rete con grafi casuali
+        (Sezione~\ref{sec:st_smallworld});
+  \item la tendenza degli hub a collegarsi tra loro, cioè il fenomeno del
+        \emph{rich-club} (Sezione~\ref{sec:st_richclub});
+  \item la suddivisione in community (Sezione~\ref{sec:st_community});
+  \item la visualizzazione dell'intera rete (Sezione~\ref{sec:st_visualizzazione}).
+\end{itemize}
+In ogni sezione si verifica anche il rapporto tra la struttura trovata e la classe
+degli sviluppatori (web o ML).
+
+\subsection{Librerie utilizzate}
+{\sloppy Il codice è contenuto nello script \texttt{structure\_analysis.py}
+(cartella \texttt{3\_STRUCTURE\_ANALYSIS/codice}), che utilizza le seguenti
+librerie:\par}
+\begin{itemize}
+  \item \textbf{python-igraph}: rappresentazione del grafo, $k$-core, clique,
+        generazione dei grafi casuali, algoritmi di community detection e layout;
+  \item \textbf{leidenalg}: algoritmo di Leiden;
+  \item \textbf{SciPy}, \textbf{pandas} e \textbf{NumPy}: statistiche e gestione
+        dei risultati;
+  \item \textbf{Matplotlib}: realizzazione dei grafici.
+\end{itemize}
+Le partizioni in community e il layout della rete completa vengono salvati nella
+cartella \texttt{cache}. Le tabelle complete sono raccolte nel file
+\texttt{structure\_results.md}.
+
+% ------------------------------------------------------------
+\section{Connettività e punti critici}
+\label{sec:st_connettivita}
+
+La rete è formata da un'unica componente connessa. La connessione però è fragile in
+molti punti:
+\begin{itemize}
+  \item un \textbf{punto di articolazione} è un nodo la cui rimozione disconnette
+        il grafo: ce ne sono \num{3188}, l'\SI{8.5}{\percent} dei nodi;
+  \item un \textbf{bridge} è un arco la cui rimozione disconnette il grafo: ce ne
+        sono \num{5241}.
+\end{itemize}
+Quasi tutti i bridge (\num{5045} su \num{5241}) collegano un nodo di grado 1 al
+resto della rete. La rete ha quindi una struttura a due livelli: un
+\textbf{nucleo biconnesso}, in cui ogni nodo resta raggiungibile anche dopo la
+rimozione di un qualsiasi altro nodo, che contiene \num{32416} nodi
+(\SI{86}{\percent}), e una periferia di nodi ``appesi'' al nucleo. La seconda
+componente biconnessa più grande ha appena 4 nodi.
+
+I punti di articolazione più importanti sono i grandi hub del
+Capitolo~\ref{cap:centralita}. Rimuovendo \texttt{dalinhuang99} la rete si spezza in
+369 componenti e si staccano 379 nodi, collegati alla rete solo attraverso di lui;
+rimuovendo \texttt{nfultz} se ne staccano 123.
+
+% ------------------------------------------------------------
+\section{Decomposizione $k$-core}
+\label{sec:st_kcore}
+
+Il \textbf{$k$-core} di un grafo è il sottografo massimale in cui ogni nodo ha
+almeno $k$ vicini all'interno del sottografo stesso. Si ottiene eliminando
+ripetutamente i nodi di grado inferiore a $k$. La \textbf{coreness} di un nodo è il
+massimo $k$ per cui il nodo appartiene al $k$-core, e l'insieme dei nodi con
+coreness esattamente $k$ forma la $k$-\emph{shell}. A differenza del grado, la
+coreness misura se un nodo è inserito in una zona densa della rete: un hub collegato
+solo a nodi periferici ha grado alto ma coreness bassa.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../3_STRUCTURE_ANALYSIS/figures/01_kcore.png}
+  \caption{A sinistra, numero di nodi in ciascuna $k$-shell, suddivisi per classe
+  (scala logaritmica); a destra, quota di sviluppatori ML nel $k$-core al
+  crescere di $k$.}
+  \label{fig:st_kcore}
+\end{figure}
+
+\begin{table}[H]
+  \centering
+  \caption{Dimensione e composizione del $k$-core.}
+  \label{tab:st_kcore}
+  \small
+  \begin{tabular}{@{}rrrr@{}}
+    \toprule
+    $k$ & \textbf{Nodi nel $k$-core} & \textbf{Quota della rete} & \textbf{Quota ML} \\
+    \midrule
+    1  & \num{37700} & \SI{100}{\percent}  & \SI{25.8}{\percent} \\
+    2  & \num{32464} & \SI{86.1}{\percent} & \SI{24.2}{\percent} \\
+    5  & \num{20491} & \SI{54.4}{\percent} & \SI{19.8}{\percent} \\
+    10 & \num{10710} & \SI{28.4}{\percent} & \SI{14.8}{\percent} \\
+    20 & \num{3661}  & \SI{9.7}{\percent}  & \SI{7.6}{\percent} \\
+    30 & \num{915}   & \SI{2.4}{\percent}  & \SI{1.2}{\percent} \\
+    34 & \num{360}   & \SI{1.0}{\percent}  & \SI{1.4}{\percent} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+La coreness massima è $k_{\max}=34$. Il 34-core, il nucleo più interno della rete,
+contiene 360 nodi e \num{10488} archi, con densità \num{0.16}: circa 400 volte
+quella dell'intera rete. La Figura~\ref{fig:st_kcore} mostra che la dimensione delle
+shell decresce regolarmente con $k$, ma l'ultima shell è più popolata delle
+precedenti: il nucleo è un gruppo compatto, distinto dalla periferia.
+
+La composizione per classe è il risultato più netto
+(Tabella~\ref{tab:st_kcore}). La quota di sviluppatori ML diminuisce in modo
+praticamente monotono con $k$: dal \SI{25.8}{\percent} dell'intera rete all'\SI{1.4}{\percent}
+del nucleo. La coreness mediana è 6 per gli sviluppatori web e 4 per quelli ML. Il
+nucleo della rete è quindi formato quasi esclusivamente da sviluppatori web,
+coerentemente con le misure di centralità spettrali del
+Capitolo~\ref{cap:centralita}.
+
+% ------------------------------------------------------------
+\section{Clique}
+\label{sec:st_clique}
+
+Una \textbf{clique} è un insieme di nodi tutti collegati tra loro; è
+\textbf{massimale} se non può essere estesa aggiungendo un altro nodo. Trovare
+tutte le clique massimali è un problema NP-difficile nel caso generale, ma su una
+rete sparsa come questa l'algoritmo di igraph impiega circa 1,5 secondi.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.75\textwidth]{../3_STRUCTURE_ANALYSIS/figures/02_clique.png}
+  \caption{Distribuzione della dimensione delle clique massimali (scala
+  logaritmica).}
+  \label{fig:st_clique}
+\end{figure}
+
+La rete contiene \num{223672} clique massimali con almeno 3 nodi
+(Figura~\ref{fig:st_clique}). La clique più grande ha $\omega(G)=24$ nodi; le
+quattro clique di dimensione massima coinvolgono in tutto 26 nodi e ne condividono
+22, quindi sono varianti dello stesso gruppo di sviluppatori, quasi tutti web
+(\SI{3.8}{\percent} ML).
+
+\begin{table}[H]
+  \centering
+  \caption{Composizione per classe delle clique massimali.}
+  \label{tab:st_clique}
+  \small
+  \begin{tabular}{@{}lrrrr@{}}
+    \toprule
+    \textbf{Dimensione} & \textbf{Clique} & \textbf{Solo web} & \textbf{Solo ML} & \textbf{Miste} \\
+    \midrule
+    $\geq 3$  & \num{223672} & \SI{82.2}{\percent} & \SI{1.3}{\percent}  & \SI{16.4}{\percent} \\
+    $\geq 5$  & \num{96944}  & \SI{87.9}{\percent} & \SI{0.1}{\percent}  & \SI{12.0}{\percent} \\
+    $\geq 10$ & \num{1496}   & \SI{65.7}{\percent} & \SI{0}{\percent}    & \SI{34.3}{\percent} \\
+    $\geq 15$ & \num{106}    & \SI{39.6}{\percent} & \SI{0}{\percent}    & \SI{60.4}{\percent} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+La Tabella~\ref{tab:st_clique} mostra che le clique composte da soli sviluppatori
+ML sono rare e piccole: nessuna clique con almeno 10 nodi è interamente ML. Le
+clique grandi sono invece sempre più spesso miste: gli sviluppatori ML partecipano
+ai gruppi densi soprattutto insieme a sviluppatori web.
+
+% ------------------------------------------------------------
+\section{Small-world e confronto con modelli nulli}
+\label{sec:st_smallworld}
+
+Una rete è detta \textbf{small-world} se ha distanze medie brevi, come un grafo
+casuale, ma un clustering molto più alto. Per verificarlo, la rete è stata
+confrontata con due \textbf{modelli nulli}, cioè grafi casuali che conservano solo
+alcune proprietà della rete reale:
+\begin{itemize}
+  \item il grafo di \textbf{Erdős--Rényi} $G(n,m)$, con lo stesso numero di nodi e
+        di archi, archi scelti in modo uniforme;
+  \item il \textbf{configuration model}, con la stessa sequenza dei gradi della rete
+        reale, generato con l'algoritmo di Viger--Latapy (grafo semplice e
+        connesso).
+\end{itemize}
+Il secondo modello permette di capire quali proprietà della rete reale siano una
+semplice conseguenza della distribuzione dei gradi e quali no. Per ciascun modello
+sono state generate 5 repliche. La distanza media è stimata con visite in ampiezza da
+300 nodi sorgente, gli stessi per tutti i grafi.
+
+\begin{table}[H]
+  \centering
+  \caption{Rete reale e modelli nulli (medie su 5 repliche).}
+  \label{tab:st_smallworld}
+  \small
+  \begin{tabular}{@{}lrrrr@{}}
+    \toprule
+    \textbf{Grafo} & \textbf{Transitività} & \textbf{Clustering medio} & \textbf{Distanza media} & \textbf{Assortatività} \\
+    \midrule
+    GitHub (reale)      & \num{0.0124}  & \num{0.1675}  & \num{3.27} & \num{-0.075} \\
+    Erdős--Rényi        & \num{0.0004}  & \num{0.0004}  & \num{4.14} & \num{0.001} \\
+    Configuration model & \num{0.0123}  & \num{0.0923}  & \num{3.14} & \num{-0.071} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../3_STRUCTURE_ANALYSIS/figures/03_small_world.png}
+  \caption{A sinistra, rapporto tra le proprietà dei modelli nulli e quelle della
+  rete reale (scala logaritmica); a destra, clustering locale medio in funzione del
+  grado, con retta di regressione in scala log-log.}
+  \label{fig:st_smallworld}
+\end{figure}
+
+Dalla Tabella~\ref{tab:st_smallworld} e dalla Figura~\ref{fig:st_smallworld}
+emergono tre risultati.
+\begin{enumerate}
+  \item \textbf{La rete è small-world.} La distanza media (\num{3.27}) è persino
+        inferiore a quella del grafo di Erdős--Rényi (\num{4.14}), grazie agli hub,
+        mentre il clustering medio è circa 400 volte più alto. Il coefficiente
+        \[
+          \sigma = \frac{C/C_{\text{rand}}}{L/L_{\text{rand}}},
+        \]
+        dove $C$ è il clustering medio e $L$ la distanza media, vale circa 513
+        rispetto a Erdős--Rényi (una rete è small-world se $\sigma>1$).
+  \item \textbf{Il configuration model spiega molte proprietà della rete}: la
+        transitività, la distanza media e anche la disassortatività di grado sono
+        quasi identiche a quelle reali. Sono quindi conseguenze della distribuzione
+        dei gradi: gli hub, collegandosi necessariamente a molti nodi di grado
+        basso, rendono la rete disassortativa e accorciano le distanze.
+  \item \textbf{Il clustering medio no}: quello reale è \num{1.8} volte quello del
+        configuration model ($\sigma=\num{1.74}$ rispetto a questo modello). Tra
+        gli sviluppatori di grado basso e medio c'è quindi una tendenza a formare
+        triangoli (``gli amici dei miei amici sono miei amici'') che la sola
+        distribuzione dei gradi non spiega.
+\end{enumerate}
+
+Il grafico a destra della Figura~\ref{fig:st_smallworld} mostra infine che il
+clustering locale decresce con il grado secondo una legge di potenza
+$C(k)\propto k^{-\beta}$ con $\beta=\num{0.65}$ ($R^2=\num{0.97}$). Nei modelli
+gerarchici di Ravasz e Barabási si ha $\beta=1$: i nodi di grado basso appartengono
+a piccoli gruppi densi, mentre gli hub collegano gruppi diversi e hanno quindi
+clustering basso. Il valore osservato indica una struttura gerarchica, anche se meno
+marcata di quella del modello teorico.
+
+% ------------------------------------------------------------
+\section{Rich-club}
+\label{sec:st_richclub}
+
+Il \textbf{coefficiente rich-club} misura se i nodi di grado alto tendono a
+collegarsi tra loro:
+\[
+  \phi(k) = \frac{2E_{>k}}{N_{>k}(N_{>k}-1)},
+\]
+dove $N_{>k}$ è il numero di nodi con grado maggiore di $k$ ed $E_{>k}$ il numero di
+archi tra di essi; $\phi(k)$ è quindi la densità del sottografo dei nodi ``ricchi''.
+Poiché $\phi(k)$ cresce con $k$ anche in un grafo casuale, lo si confronta con il
+valore medio $\phi_{\text{rand}}(k)$ ottenuto su 5 grafi ricablati che conservano i
+gradi. Il coefficiente normalizzato $\rho(k)=\phi(k)/\phi_{\text{rand}}(k)$ è
+maggiore di 1 se gli hub si collegano tra loro più di quanto previsto dal caso.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../3_STRUCTURE_ANALYSIS/figures/04_rich_club.png}
+  \caption{A sinistra, coefficiente rich-club della rete reale e dei grafi
+  ricablati; a destra, coefficiente normalizzato $\rho(k)$.}
+  \label{fig:st_richclub}
+\end{figure}
+
+La Figura~\ref{fig:st_richclub} mostra che $\rho(k)\approx 1$ fino a $k\approx 25$
+e scende poi sotto 1, fino a un minimo di \num{0.46} per $k=516$: i 70 nodi con più
+di 432 vicini sono collegati tra loro con una densità di \num{0.30}, contro
+\num{0.63} nei grafi ricablati. La rete quindi \textbf{non ha un rich-club}: gli
+hub tendono a evitarsi. È coerente con la disassortatività di grado
+(Sezione~\ref{sec:st_smallworld}) e con il fatto che ogni grande hub raccoglie
+attorno a sé una propria area della rete, come si vedrà con le community.
+
+% ------------------------------------------------------------
+\section{Community detection}
+\label{sec:st_community}
+
+Una \textbf{community} è un gruppo di nodi densamente collegati tra loro e
+debolmente collegati al resto della rete. La qualità di una suddivisione in
+community si misura di solito con la \textbf{modularità}
+\[
+  Q = \frac{1}{2m}\sum_{i,j}\left[A_{ij} - \gamma\frac{k_i k_j}{2m}\right]\delta(c_i,c_j),
+\]
+che confronta il numero di archi interni alle community con quello atteso in un
+grafo casuale con gli stessi gradi; $c_i$ è la community del nodo $i$ e
+$\gamma$ è il parametro di risoluzione (nella modularità standard $\gamma=1$).
+
+\subsection{Algoritmi}
+Sono stati confrontati cinque algoritmi:
+\begin{itemize}
+  \item \textbf{Louvain}: ottimizzazione greedy della modularità in due fasi
+        ripetute, spostamento locale dei nodi e aggregazione delle community;
+  \item \textbf{Leiden}: miglioramento di Louvain che garantisce community
+        connesse internamente, grazie a una fase di raffinamento;
+  \item \textbf{Label Propagation}: ogni nodo adotta l'etichetta più frequente tra
+        i vicini, fino a convergenza;
+  \item \textbf{Infomap}: minimizza la lunghezza della descrizione di una
+        passeggiata casuale sulla rete (\emph{map equation});
+  \item \textbf{Fast Greedy} (Clauset--Newman--Moore): clustering gerarchico
+        agglomerativo che unisce a ogni passo le due community che aumentano di più
+        la modularità.
+\end{itemize}
+
+\begin{table}[H]
+  \centering
+  \caption{Confronto tra gli algoritmi di community detection. L'NMI (normalized
+  mutual information) misura l'accordo tra la partizione e la classe web/ML.}
+  \label{tab:st_algoritmi}
+  \small
+  \begin{tabular}{@{}lrrrrr@{}}
+    \toprule
+    \textbf{Algoritmo} & \textbf{Community} & \textbf{Modularità $Q$} & \textbf{Comm.\ max} & \textbf{NMI classe} & \textbf{Tempo (s)} \\
+    \midrule
+    Louvain           & 30         & \num{0.453} & \SI{22.0}{\percent} & \num{0.115} & \num{0.2} \\
+    Leiden            & 30         & \num{0.459} & \SI{19.8}{\percent} & \num{0.112} & \num{2.4} \\
+    Label Propagation & 12         & \num{0.000} & \SI{99.9}{\percent} & \num{0.003} & \num{0.1} \\
+    Infomap           & \num{1470} & \num{0.394} & \SI{15.2}{\percent} & \num{0.068} & \num{4.8} \\
+    Fast Greedy       & 407        & \num{0.393} & \SI{31.0}{\percent} & \num{0.066} & \num{25.6} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../3_STRUCTURE_ANALYSIS/figures/05_community_algoritmi.png}
+  \caption{A sinistra, modularità ottenuta da ciascun algoritmo; a destra, NMI tra
+  le partizioni prodotte dai diversi algoritmi.}
+  \label{fig:st_algoritmi}
+\end{figure}
+
+Dalla Tabella~\ref{tab:st_algoritmi} e dalla Figura~\ref{fig:st_algoritmi}
+emerge quanto segue.
+\begin{itemize}
+  \item \textbf{Leiden} ottiene la modularità più alta ($Q=\num{0.459}$), seguito
+        da Louvain ($Q=\num{0.453}$). Entrambi trovano 30 community, di cui circa
+        15 con almeno 10 nodi. Un valore di $Q$ intorno a \num{0.45} indica una
+        struttura a community ben definita.
+  \item \textbf{Label Propagation fallisce}: mette il \SI{99.9}{\percent} dei nodi
+        in un'unica community ($Q\approx 0$). Gli hub, con migliaia di vicini,
+        diffondono la propria etichetta a quasi tutta la rete già nelle prime
+        iterazioni. È un limite noto dell'algoritmo sulle reti con hub molto
+        grandi.
+  \item \textbf{Infomap} e \textbf{Fast Greedy} producono partizioni molto più
+        frammentate, con centinaia di community piccole, e modularità più bassa.
+  \item L'accordo tra gli algoritmi è solo moderato: l'NMI tra Louvain e Leiden è
+        \num{0.56}. Con hub che collegano molte aree diverse, l'assegnazione dei
+        nodi di confine è ambigua, e algoritmi diversi (o esecuzioni diverse dello
+        stesso algoritmo) la risolvono in modo diverso.
+\end{itemize}
+Nel seguito si utilizza la partizione di Leiden.
+
+\subsection{Effetto della risoluzione}
+Il parametro $\gamma$ controlla la scala delle community: valori minori di 1
+favoriscono poche community grandi, valori maggiori molte community piccole. La
+Tabella~\ref{tab:st_gamma} riporta il risultato di Leiden al variare di $\gamma$.
+
+\begin{table}[H]
+  \centering
+  \caption{Leiden al variare della risoluzione $\gamma$. La modularità è calcolata
+  sempre con $\gamma=1$, per rendere confrontabili i risultati.}
+  \label{tab:st_gamma}
+  \small
+  \begin{tabular}{@{}rrrrr@{}}
+    \toprule
+    $\gamma$ & \textbf{Community ($\geq 10$ nodi)} & \textbf{Modularità $Q$} & \textbf{Comm.\ max} & \textbf{NMI classe} \\
+    \midrule
+    \num{0.25} & 1   & \num{0.000} & \SI{99.8}{\percent} & \num{0.004} \\
+    \num{0.5}  & 4   & \num{0.379} & \SI{56.5}{\percent} & \num{0.199} \\
+    1          & 15  & \num{0.459} & \SI{19.8}{\percent} & \num{0.112} \\
+    2          & 42  & \num{0.420} & \SI{8.7}{\percent}  & \num{0.080} \\
+    4          & 129 & \num{0.369} & \SI{5.1}{\percent}  & \num{0.062} \\
+    8          & 320 & \num{0.296} & \SI{1.9}{\percent}  & \num{0.051} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+La modularità standard è massima per $\gamma=1$. L'accordo con la classe web/ML è
+invece massimo per $\gamma=\num{0.5}$ (NMI \num{0.20}): con sole 4 community
+grandi, la rete si divide approssimativamente in un'area ML e in aree web. Aumentando
+$\gamma$ le community si suddividono in gruppi più piccoli, che non seguono più la
+distinzione tra le classi.
+
+\subsection{Le community di Leiden}
+
+\begin{table}[H]
+  \centering
+  \caption{Le dieci community più grandi trovate da Leiden. La conduttanza è il
+  rapporto tra gli archi uscenti e il volume (somma dei gradi) della community: più
+  è bassa, più la community è separata dal resto della rete.}
+  \label{tab:st_leiden}
+  \small
+  \begin{tabular}{@{}rlrrrr@{}}
+    \toprule
+    \textbf{\#} & \textbf{Hub} & \textbf{Nodi} & \textbf{Quota ML} & \textbf{Densità} & \textbf{Conduttanza} \\
+    \midrule
+    1  & \texttt{nfultz}            & \num{7474} & \SI{74.1}{\percent} & \num{0.0012} & \num{0.30} \\
+    2  & \texttt{addyosmani}        & \num{6569} & \SI{5.2}{\percent}  & \num{0.0017} & \num{0.42} \\
+    3  & \texttt{gabrielpconceicao} & \num{6246} & \SI{12.1}{\percent} & \num{0.0014} & \num{0.45} \\
+    4  & \texttt{ronenhamias}       & \num{5143} & \SI{18.1}{\percent} & \num{0.0027} & \num{0.29} \\
+    5  & \texttt{rfthusn}           & \num{2787} & \SI{12.7}{\percent} & \num{0.0035} & \num{0.42} \\
+    6  & \texttt{dalinhuang99}      & \num{2650} & \SI{26.7}{\percent} & \num{0.0023} & \num{0.52} \\
+    7  & \texttt{philsturgeon}      & \num{2591} & \SI{5.1}{\percent}  & \num{0.0024} & \num{0.45} \\
+    8  & \texttt{onevcat}           & \num{1517} & \SI{22.8}{\percent} & \num{0.0059} & \num{0.44} \\
+    9  & \texttt{nelsonic}          & 747        & \SI{22.2}{\percent} & \num{0.0030} & \num{0.71} \\
+    10 & \texttt{hunkim}            & 567        & \SI{35.3}{\percent} & \num{0.0125} & \num{0.37} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../3_STRUCTURE_ANALYSIS/figures/06_community_leiden.png}
+  \caption{A sinistra, composizione per classe delle 15 community più grandi
+  (l'etichetta è l'hub, cioè il nodo di grado massimo, della community); a destra,
+  dimensione delle community in funzione del rango.}
+  \label{fig:st_leiden}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{../3_STRUCTURE_ANALYSIS/figures/07_grafo_community.png}
+  \caption{Grafo delle 15 community più grandi: ogni nodo è una community, con
+  dimensione proporzionale al numero di sviluppatori; lo spessore degli archi è
+  proporzionale al numero di archi tra le community; il colore indica la quota di
+  sviluppatori ML (grigio = quota media della rete).}
+  \label{fig:st_grafo_community}
+\end{figure}
+
+La Tabella~\ref{tab:st_leiden} e le Figure~\ref{fig:st_leiden}
+e~\ref{fig:st_grafo_community} mostrano che:
+\begin{itemize}
+  \item le community sono organizzate \textbf{attorno agli hub}: in cinque delle
+        sei community più grandi il nodo di grado massimo è uno dei sei nodi più
+        centrali del Capitolo~\ref{cap:centralita}. Le prime 15 community coprono il
+        \SI{99.9}{\percent} dei nodi, e le loro dimensioni decrescono rapidamente
+        con il rango;
+  \item esiste una \textbf{community ML}: la community 1 (\num{7474} nodi) è
+        composta per il \SI{74}{\percent} da sviluppatori ML e contiene il
+        \SI{57}{\percent} di tutti gli sviluppatori ML della rete. Il suo hub,
+        \texttt{nfultz}, il secondo nodo più centrale della rete, è invece
+        classificato come sviluppatore web. È anche una delle community più
+        separate dal resto (conduttanza \num{0.30});
+  \item le altre nove community più grandi sono prevalentemente web, con quote ML
+        tra il \SI{5}{\percent} e il \SI{35}{\percent};
+  \item la community di \texttt{dalinhuang99}, l'hub più grande della rete, ha la
+        conduttanza più alta tra le prime otto (\num{0.52}): circa metà dei suoi archi
+        esce dalla community, coerentemente con il ruolo di ponte tra aree diverse
+        emerso dalla betweenness.
+\end{itemize}
+
+Per quantificare il legame tra community e classe si può usare l'entropia. Senza
+informazioni, l'incertezza sulla classe di uno sviluppatore è $H=\num{0.824}$ bit;
+conoscendo la sua community scende in media a \num{0.600} bit. La community spiega
+quindi il \SI{27}{\percent} dell'incertezza sulla classe. È un legame chiaro ma
+parziale: la rete separa bene l'area ML, ma una parte degli sviluppatori ML (circa
+il \SI{43}{\percent}) è distribuita nelle community web.
+
+% ------------------------------------------------------------
+\section{Visualizzazione della rete}
+\label{sec:st_visualizzazione}
+
+Per visualizzare l'intera rete si è utilizzato l'algoritmo di layout
+\textbf{DrL} (Distributed Recursive Layout), un algoritmo \emph{force-directed}
+progettato per grafi di grandi dimensioni: nodi collegati si attraggono, nodi non
+collegati si respingono, e i gruppi densi risultano quindi vicini nel disegno. Il
+calcolo del layout richiede circa due minuti. Per leggibilità sono disegnati tutti i
+nodi, con dimensione proporzionale alla radice del grado, ma solo un campione
+casuale di \num{60000} archi.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{../3_STRUCTURE_ANALYSIS/figures/08_rete_completa.png}
+  \caption{La rete completa con layout DrL. A sinistra i nodi sono colorati per
+  classe, a destra per community di Leiden (le otto più grandi; in grigio le
+  altre).}
+  \label{fig:st_rete}
+\end{figure}
+
+La Figura~\ref{fig:st_rete} riassume visivamente i risultati del capitolo:
+\begin{itemize}
+  \item la rete è formata da diversi \textbf{gruppi densi}, ciascuno raccolto
+        attorno a uno o più hub e collegato agli altri da fasci di archi;
+  \item gli \textbf{sviluppatori ML} (in arancione a sinistra) sono concentrati in
+        un'area ben distinta nella parte alta del disegno, che corrisponde alla
+        community 1 di Leiden; altri sviluppatori ML sono sparsi nelle aree web;
+  \item le community di Leiden (a destra) corrispondono in larga parte ai gruppi
+        visibili nel layout, che è calcolato in modo indipendente: è una conferma
+        qualitativa della partizione trovata.
+\end{itemize}
+
+% ------------------------------------------------------------
+\section{Conclusioni}
+\label{sec:st_conclusioni}
+
+\begin{itemize}
+  \item La rete ha una struttura \textbf{nucleo--periferia}: un nucleo biconnesso
+        con l'\SI{86}{\percent} dei nodi, un nucleo interno di 360 nodi
+        (34-core) e una periferia di nodi collegati alla rete da un solo arco.
+  \item È una rete \textbf{small-world} con \textbf{struttura gerarchica}: distanze
+        brevi, clustering molto superiore a quello di un grafo casuale e decrescente
+        con il grado. Distanze e disassortatività sono spiegate dalla distribuzione
+        dei gradi; il clustering no.
+  \item \textbf{Non c'è un rich-club}: gli hub non si collegano tra loro più del
+        caso, ma ciascuno organizza attorno a sé una propria area della rete.
+  \item La rete ha una chiara \textbf{struttura a community}
+        ($Q=\num{0.459}$ con Leiden), con community organizzate attorno agli hub.
+        Label Propagation fallisce su questa rete a causa degli hub molto grandi.
+  \item La struttura riflette in parte la \textbf{classe degli sviluppatori}: esiste
+        una community ML che raccoglie il \SI{57}{\percent} degli sviluppatori ML,
+        mentre il nucleo della rete è quasi esclusivamente web
+        (\SI{1.4}{\percent} ML nel 34-core).
+\end{itemize}
 
 % ==================== CAPITOLO 5 - Link Prediction nei Grafi ====================
 \chapter{Link Prediction nei Grafi}
