@@ -39,18 +39,43 @@
 \graphicspath{{images/}{../1_DATASET_ANALYSIS/figures/}{../2_CENTRALITY_ANALYSIS/figures/}%
               {../3_STRUCTURE_ANALYSIS/figures/}{../4_LINK_PREDICTION/figures/}}
 
-% ==================== Comandi del progetto ====================
-% Promemoria in rosso (da eliminare prima della consegna)
-\newcommand{\todo}[1]{\textcolor{red}{\textbf{[DA FARE:} #1\textbf{]}}}
-% Figura con riquadro rosso se l'immagine non esiste ancora
-\newcommand{\figura}[3]{%
+% ============================================================
+%  Comandi locali
+% ============================================================
+% Tabella generata dal notebook: la inserisce se esiste, altrimenti mostra un riquadro rosso
+\providecommand{\tabella}[1]{%
+  \IfFileExists{../1_DATASET_ANALYSIS/tables/#1.tex}%
+    {\input{../1_DATASET_ANALYSIS/tables/#1.tex}}%
+    {\begin{center}\fbox{\textcolor{red}{Tabella mancante: \texttt{\detokenize{#1}.tex}}}\end{center}}}
+% Figura generata dai notebook: la cerca nelle cartelle figures/ dei quattro capitoli;
+% se non la trova mostra un riquadro rosso (\providecommand: non sovrascrive una \figura già definita nel main)
+\providecommand{\figura}[3]{%
   \begin{figure}[H]
     \centering
-    \IfFileExists{../1_DATASET_ANALYSIS/figures/#1}{\includegraphics[width=0.9\textwidth]{#1}}{%
-      \fbox{\parbox[c][4cm][c]{0.8\textwidth}{\centering\textcolor{red}{Figura mancante: \texttt{\detokenize{#1}}}}}}
+    \def\figpath{}%
+    \def\cercafig##1{\ifx\figpath\empty\IfFileExists{##1#1}{\def\figpath{##1#1}}{}\fi}%
+    \cercafig{../1_DATASET_ANALYSIS/figures/}%
+    \cercafig{../2_CENTRALITY_ANALYSIS/figures/}%
+    \cercafig{../3_STRUCTURE_ANALYSIS/figures/}%
+    \cercafig{../4_LINK_PREDICTION/figures/}%
+    \cercafig{images/}%
+    \ifx\figpath\empty
+      \fbox{\parbox[c][4cm][c]{0.8\textwidth}{\centering\textcolor{red}{Figura mancante: \texttt{\detokenize{#1}}}}}%
+    \else
+      \includegraphics[width=0.9\textwidth]{\figpath}%
+    \fi
     \caption{#2}
     \label{#3}
   \end{figure}}
+% Stili TikZ per gli schemi concettuali
+\tikzset{
+  nodo/.style={circle, draw, fill=white, minimum size=6mm, inner sep=0pt, font=\small},
+  web/.style={nodo, fill=blue!15, draw=blue!60!black},
+  ml/.style={nodo, fill=orange!25, draw=orange!70!black},
+  hub/.style={nodo, minimum size=9mm, fill=blue!30, draw=blue!60!black},
+  arco/.style={draw=black!55, thick},
+  evid/.style={draw=red!70!black, very thick},
+}
 
 % ==================== Stili per il codice ====================
 \lstset{
@@ -130,19 +155,367 @@
 \newpage
 \pagestyle{plain}
 
-% -------------------- Capitoli --------------------
 % ============================================================
 %  CAPITOLO 1 - INTRODUZIONE
-%  
 % ============================================================
 \chapter{Introduzione}
 \label{cap:Introduzione}
-\cite{rozemberczki2021musae}
+
+\section{Contesto e obiettivi}
+\label{sec:contesto}
+GitHub è la principale piattaforma per lo sviluppo collaborativo di software, gli utenti pubblicano
+i propri repository, contribuiscono a quelli degli altri e segnalano con una \emph{stella} i progetti che
+ritengono interessanti. Accanto a questa dimensione tecnica, GitHub può anche essere vista come una rete sociale dove
+ogni utente può \emph{seguire} altri sviluppatori per ricevere aggiornamenti sulle loro attività. Le relazioni di
+\emph{follow} formano quindi una rete che riflette interessi comuni, collaborazioni e notorietà.
+
+L'obiettivo di questo progetto è studiare la struttura di tale rete con gli strumenti della Social Network
+Analysis, a partire dal dataset \emph{GitHub Social Network}~\cite{rozemberczki2021musae, snapnets}.
+Il dataset distingue due tipi di sviluppatori, \textbf{web} e \textbf{machine learning}, oltre a descrivere la rete nel suo
+insieme, ci chiediamo quindi se queste due comunità professionali occupino posizioni diverse e se tendano a
+collegarsi tra loro oppure a restare separate.
+
+\section{La Social Network Analysis}
+\label{sec:sna}
+La Social Network Analysis (SNA) studia le relazioni tra un insieme di attori rappresentandole come un
+grafo $G=(V,E)$, dove l'insieme dei nodi $V$ contiene gli attori e l'insieme degli archi $E$ le relazioni
+tra di essi. Spostando l'attenzione dalle caratteristiche dei singoli attori alla struttura dei loro
+legami, la SNA permette di rispondere a domande come:
+\begin{itemize}
+  \item quali attori sono più importanti o influenti nella rete (misure di centralità, Capitolo~\ref{cap:centralita});
+  \item come la rete si organizza in gruppi più densamente collegati (comunità, clique, $k$-core ed ego-network, Capitolo~\ref{cap:strutture});
+  \item quali legami, oggi assenti, potrebbero formarsi in futuro (link prediction, Capitolo~\ref{cap:link_prediction}).
+\end{itemize}
+
+\section{Strumenti utilizzati}
+\label{sec:strumenti}
+Tutte le analisi sono state svolte in Python, all'interno di Jupyter Notebook. Le librerie principali sono:
+\begin{itemize}
+  \item \textbf{NetworkX}~\cite{hagberg2008networkx}, per la costruzione dei grafi e il calcolo delle metriche;
+  \item \textbf{pandas}, per la lettura dei file e la gestione delle tabelle;
+  \item \textbf{matplotlib}, per le figure.
+\end{itemize}
+
+\section{Struttura del documento}
+\label{sec:struttura}
+Il Capitolo~\ref{cap:analisi_dataset} descrive il dataset, i controlli di qualità e le metriche globali della rete.
+Il Capitolo~\ref{cap:centralita} individua i nodi più importanti tramite le misure di centralità
+(degree, betweenness, eigenvector e PageRank ecc.). Il Capitolo~\ref{cap:strutture} analizza le strutture della
+rete: comunità, clique, $k$-core ed ego-network. Il Capitolo~\ref{cap:link_prediction} affronta il problema
+della link prediction, cioè la previsione di nuovi collegamenti. L'ultimo capitolo riassume le conclusioni.
+
 % ============================================================
-%  CAPITOLO 2 - ANALISI DELL DATASET
+%  CAPITOLO 2 - ANALISI DEL DATASET
 % ============================================================
 \chapter{Analisi del dataset}
 \label{cap:analisi_dataset}
+
+% ------------------------------------------------------------
+\section{Origine del dataset}
+\label{sec:origine}
+Il dataset è pubblicato nella collezione SNAP dell'Università di Stanford~\cite{snapnets} ed è stato
+raccolto tramite l'API pubblica di GitHub nel giugno 2019, nell'ambito del lavoro sul metodo MUSAE
+di Rozemberczki et al.~\cite{rozemberczki2021musae}. La rete è definita come segue:
+\begin{itemize}
+  \item i \textbf{nodi} sono sviluppatori che hanno assegnato una stella ad almeno 10 repository;
+  \item gli \textbf{archi} rappresentano relazioni di \emph{follow reciproco}, due sviluppatori sono collegati
+        solo se ciascuno segue l'altro. La relazione è quindi simmetrica e il grafo è \emph{non orientato};
+  \item ogni nodo ha un'\textbf{etichetta binaria} \texttt{ml\_target}, che vale 0 per gli sviluppatori web
+        e 1 per quelli di machine learning, ricavata dal titolo professionale indicato da ciascun utente.
+\end{itemize}
+
+Abbiamo scelto questo dataset per tre motivi. È abbastanza grande da presentare i fenomeni tipici delle reti
+sociali reali, pur restando trattabile con NetworkX. L'etichetta \texttt{ml\_target} permette di confrontare
+due comunità professionali all'interno della stessa rete. Infine, gli autori lo propongono esplicitamente per
+la community detection e la link prediction, due dei temi affrontati in questo progetto.
+
+% ------------------------------------------------------------
+\section{Contenuto dei file}
+\label{sec:file}
+
+\begin{table}[H]
+\centering
+\caption{File che compongono il dataset}
+\label{tab:file_dataset}
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+File & Dimensione & Contenuto \\
+\midrule
+\texttt{musae\_git\_edges.csv}    & \num{289003} righe & Archi: coppie (\texttt{id\_1}, \texttt{id\_2}) di utenti che si seguono reciprocamente \\
+\texttt{musae\_git\_target.csv}   & \num{37700} righe  & Nodi: \texttt{id}, \texttt{name} (username GitHub), \texttt{ml\_target} (0 = web, 1 = ML) \\
+\texttt{musae\_git\_features.json}& \num{37700} chiavi & Per ogni nodo, lista di indici di feature (\num{4005} distinte, da 8 a 42 per nodo) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Le feature dei nodi sono fornite già codificate: ogni nodo è descritto da una lista di indici anonimi,
+derivati dalla località, dai repository a cui ha assegnato una stella, dal datore di lavoro e dall'indirizzo
+e-mail. Poiché il significato dei singoli indici non è noto, in questo progetto le feature sono usate solo
+a scopo descrittivo. Ogni nodo ne possiede in media 18,3, con un minimo di 8 e un massimo di 42
+(Figura~\ref{fig:features}).
+
+\figura{features_per_nodo.pdf}{Numero di feature per nodo, per classe}{fig:features}
+
+% ------------------------------------------------------------
+\section{Concetti di base}
+\label{sec:concetti}
+Prima di presentare i risultati, richiamiamo le nozioni utilizzate nel resto del capitolo, illustrate
+nella Figura~\ref{fig:concetti}.
+\begin{itemize}
+  \item Il \textbf{grado} di un nodo è il numero dei suoi vicini, cioè degli archi che vi incidono.
+  \item Un \textbf{cammino minimo} tra due nodi è il percorso che li collega attraversando il minor numero di archi;
+        la sua lunghezza è la \emph{distanza} tra i due nodi.
+  \item Il \textbf{cammino medio} è la media delle distanze su tutte le coppie di nodi, mentre il
+        \textbf{diametro} è la distanza massima.
+  \item Una \textbf{componente connessa} è un insieme massimale di nodi tra i quali esiste sempre un cammino.
+        La componente più grande è indicata con LCC (\emph{Largest Connected Component}).
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=14mm]
+  % componente principale
+  \node[nodo] (a) {A};
+  \node[nodo, right=of a] (b) {B};
+  \node[nodo, below=of a] (c) {C};
+  \node[nodo, right=of c] (d) {D};
+  \node[nodo, right=of b] (e) {E};
+  \node[nodo, right=of e] (f) {F};
+  \draw[arco] (a)--(b) (a)--(c) (b)--(c) (c)--(d);
+  \draw[evid] (d)--(b) (b)--(e) (e)--(f);
+  % componente separata
+  \node[nodo, right=22mm of f] (g) {G};
+  \node[nodo, below=of g] (h) {H};
+  \draw[arco] (g)--(h);
+  % annotazioni
+  \node[font=\footnotesize, above=9mm of b] {grado(B) = 4};
+  \node[font=\footnotesize, align=center, text=red!70!black, above=3mm of e] {cammino minimo D$\to$F: 3 archi};
+  \draw[dashed, black!40, rounded corners] ([shift={(-4mm,4mm)}]g.north west) rectangle ([shift={(4mm,-4mm)}]h.south east);
+  \node[font=\footnotesize, below=5mm of h] {2\textsuperscript{a} componente};
+\end{tikzpicture}
+\caption{Nozioni di base su un grafo di esempio: grado di un nodo, cammino minimo e componenti connesse}
+\label{fig:concetti}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Controlli di qualità}
+\label{sec:controlli}
+
+\begin{table}[H]
+\centering
+\caption{Controlli effettuati sui file grezzi}
+\label{tab:controlli}
+\begin{tabular}{l r}
+\toprule
+Controllo & Risultato \\
+\midrule
+Valori mancanti (archi / nodi)              & 0 / 0 \\
+Identificativi contigui da 0 a \num{37699}  & sì \\
+Stessi \texttt{id} nei tre file             & sì \\
+Nodi isolati                                & 0 \\
+Cappi[archi da un nodo a sé stesso] ($u=v$)                               & 0 \\
+Archi duplicati o salvati nei due versi     & 0 \\
+Username duplicati                          & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Nessuno dei controlli ha rilevato anomalie, non è stato necessario eliminare né correggere alcuna riga.
+Come ulteriore verifica, la Tabella~\ref{tab:confronto_snap} confronta le statistiche del grafo costruito
+con quelle dichiarate da SNAP. Numero di nodi e di archi coincidono esattamente; la densità calcolata,
+pari a $0{,}000407$, è riportata da SNAP arrotondata a $0{,}001$, e lo stesso vale per la transitività.
+
+\tabella{confronto_snap}
+
+% ------------------------------------------------------------
+\section{Costruzione del grafo}
+\label{sec:costruzione}
+Il grafo $G$ è costruito con la classe \texttt{nx.Graph}, adatta ai grafi non orientati poiché le
+relazioni di follow reciproco sono simmetriche. I nodi sono letti dal file dei target, così da includere
+anche eventuali nodi senza archi, e ricevono come attributo l'etichetta \texttt{ml\_target};
+gli archi sono letti dal file degli archi (musae\_git\_edges.csv).
+
+\begin{lstlisting}[language=Python, caption={Costruzione del grafo $G$ con NetworkX}]
+G = nx.Graph()
+G.add_nodes_from(target["id"])
+G.add_edges_from(edges[["id_1", "id_2"]].itertuples(index=False, name=None))
+nx.set_node_attributes(G, target.set_index("id")["ml_target"].to_dict(), "ml_target")
+\end{lstlisting}
+
+% ------------------------------------------------------------
+\section{Metriche globali della rete}
+\label{sec:metriche}
+
+\subsection{Composizione delle classi}
+La rete contiene \num{27961} sviluppatori web (74,2\%) e \num{9739} sviluppatori di machine learning
+(25,8\%). Le due classi sono quindi sbilanciate, circa tre a uno, un aspetto da tenere presente in tutte le
+analisi successive, perché la classe web tenderà a prevalere in ogni misura aggregata.
+
+\subsection{Grado e sua distribuzione}
+Il grado medio della rete è 15,3, ma questo valore è poco rappresentativo del nodo tipico: il grado
+mediano è 6 per gli sviluppatori web e 4 per quelli di machine learning. La distribuzione dei gradi è infatti
+\emph{a coda lunga} (Figura~\ref{fig:gradi}): la grande maggioranza dei nodi ha pochi vicini, mentre un numero
+ridotto di \emph{hub} ne ha migliaia. I nodi con grado più alto sono tutti sviluppatori web:
+\texttt{dalinhuang99} (\num{9458} vicini, circa un quarto dell'intera rete), \texttt{nfultz} (\num{7085})
+e \texttt{addyosmani} (\num{3324}). Un numero così elevato di follow \emph{reciproci} suggerisce che alcuni di
+questi account ricambino sistematicamente chi li segue (comportamento detto \emph{follow-back}); questi nodi
+sono stati mantenuti, ma ne terremo conto nell'interpretazione delle centralità.
+
+Il grafico di destra riporta la funzione di distribuzione complementare (CCDF), cioè per ogni valore $k$ la
+quota di nodi con grado almeno pari a $k$, $P(K \geq k)$. In scala logaritmica, la curva scende lentamente lungo
+più ordini di grandezza: è il segno della presenza di hub. La curva degli sviluppatori ML scende più rapidamente: hanno in generale meno
+vicini (grado medio 8,6 contro 17,7 degli sviluppatori web).
+
+\figura{distribuzione_gradi.pdf}{Distribuzione dei gradi (sinistra) e CCDF del grado per classe (destra), in scala logaritmica}{fig:gradi}
+
+\subsection{Connettività e cammini}
+La rete è formata da un'unica componente connessa: ogni sviluppatore può raggiungere qualunque altro
+attraverso una catena di follow reciproci. Il calcolo esatto delle distanze richiederebbe una visita in
+ampiezza (BFS) a partire da ciascuno dei \num{37700} nodi, operazione troppo costosa. Il cammino medio è stato
+quindi stimato con una BFS da 200 nodi scelti a caso, ottenendo un valore di circa 3,30; il diametro è stato
+calcolato con l'algoritmo approssimato \emph{2-sweep}, che fornisce un limite inferiore: almeno 11.
+Due sviluppatori qualsiasi sono dunque separati in media da poco più di tre passaggi, nonostante la rete sia
+molto sparsa: è il fenomeno del \emph{piccolo mondo}, reso possibile dagli hub che fanno da ponte tra
+zone lontane della rete.
+
+\subsection{Clustering e transitività}
+Il clustering misura quanto i vicini di un nodo siano collegati anche tra loro, cioè quanto spesso
+``gli amici dei miei amici sono miei amici''. Il \textbf{coefficiente di clustering locale} di un nodo $i$
+con $k_i$ vicini è
+\[
+  C_i = \frac{\text{numero di archi tra i vicini di } i}{k_i (k_i - 1)/2},
+\]
+e il \textbf{clustering medio} è la media di $C_i$ su tutti i nodi. La \textbf{transitività} considera
+invece la rete nel suo insieme:
+\[
+  T = \frac{3 \times \text{numero di triangoli}}{\text{numero di triple connesse}},
+\]
+dove una tripla connessa è un cammino di due archi.
+
+Nella nostra rete i due indici sono molto diversi: il clustering medio vale 0,168, la transitività solo
+0,012. La differenza è dovuta agli hub (Figura~\ref{fig:clustering}). Un nodo con migliaia di vicini genera
+milioni di triple connesse, quasi tutte aperte: nel calcolo della transitività questi nodi dominano e
+abbassano il valore complessivo. Nel clustering medio, invece, ogni hub conta come un solo nodo, mentre i
+numerosi nodi di grado basso, spesso inseriti in piccoli gruppi coesi, mantengono la media più alta.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  % a sinistra: nodo con clustering alto
+  \begin{scope}
+    \node[nodo] (i) at (0,0) {$i$};
+    \foreach \ang/\n in {90/a, 210/b, 330/c} \node[nodo] (\n) at (\ang:15mm) {};
+    \draw[arco] (i)--(a) (i)--(b) (i)--(c);
+    \draw[evid] (a)--(b) (b)--(c) (c)--(a);
+    \node[font=\footnotesize, align=center] at (0,-2.4) {3 coppie di vicini, 3 collegate\\$C_i = 3/3 = 1$};
+  \end{scope}
+  % a destra: hub con clustering basso
+  \begin{scope}[xshift=65mm]
+    \node[hub] (h) at (0,0) {hub};
+    \foreach \k in {0,...,9} \node[nodo, minimum size=4mm] (v\k) at (\k*36:17mm) {};
+    \foreach \k in {0,...,9} \draw[arco] (h)--(v\k);
+    \draw[evid] (v0)--(v1);
+    \node[font=\footnotesize, align=center] at (0,-2.4) {45 coppie di vicini, 1 collegata\\$C_{hub} = 1/45 \approx 0{,}02$};
+  \end{scope}
+\end{tikzpicture}
+\caption{Coefficiente di clustering locale: un nodo con vicini tutti collegati (sinistra) e un hub con vicini quasi mai collegati (destra)}
+\label{fig:clustering}
+\end{figure}
+
+\subsection{Assortatività}
+Il coefficiente di assortatività misura la tendenza dei nodi a collegarsi a nodi simili rispetto a una
+certa caratteristica. Varia tra $-1$ e $+1$: un valore positivo indica che i nodi si collegano
+preferibilmente a nodi simili, un valore vicino a zero che i collegamenti non dipendono dalla
+caratteristica, un valore negativo che si collegano preferibilmente a nodi diversi.
+
+Rispetto al grado, l'assortatività vale $-0{,}075$: la rete è leggermente \emph{disassortativa}, cioè gli hub
+tendono a essere collegati a nodi con pochi vicini più che ad altri hub. Rispetto all'etichetta \texttt{ml\_target}, invece, l'assortatività vale $0{,}378$: un valore
+nettamente positivo, approfondito nella Sezione~\ref{sec:omofilia}. La Tabella~\ref{tab:metriche_grafi}
+riassume tutte le metriche, per $G$ e per i sottografi descritti nella Sezione~\ref{sec:sottografi}.
+
+\tabella{metriche_grafi}
+
+% ------------------------------------------------------------
+\section{Omofilia tra sviluppatori web e ML}
+\label{sec:omofilia}
+Si parla di \emph{omofilia} quando i nodi si collegano preferibilmente a nodi simili. Per misurarla in
+modo intuitivo, abbiamo contato gli archi tra ogni coppia di classi (web--web, web--ML, ML--ML) e li abbiamo
+confrontati con il numero atteso se ogni nodo mantenesse il proprio grado ma scegliesse i vicini senza
+tener conto della classe. Il rapporto tra archi osservati e attesi vale 1 in assenza di preferenze, è
+maggiore di 1 se un tipo di legame è più frequente del caso, minore di 1 se è più raro.
+
+I risultati (Tabella~\ref{tab:omofilia}) mostrano un'omofilia marcata: gli archi tra sviluppatori ML sono
+3,22 volte più numerosi del previsto, mentre quelli tra web e ML sono solo 0,62 volte il valore atteso.
+Gli archi web--web sono sostanzialmente in linea con il caso (1,06), perché la classe web è maggioritaria.
+In altre parole, gli sviluppatori di machine learning formano un gruppo che si segue prevalentemente al
+proprio interno.
+
+\tabella{omofilia}
+
+% ------------------------------------------------------------
+\section{Sottografi analizzati}
+\label{sec:sottografi}
+Una rete di \num{37700} nodi non può essere rappresentata graficamente in modo leggibile, e alcune analisi
+dei capitoli successivi, come la betweenness esatta o l'enumerazione delle clique, sarebbero troppo
+costose sull'intero grafo. Abbiamo quindi estratto alcuni sottografi, che verranno analizzati accanto a $G$.
+
+\subsection{Sottografi per classe: $G_{web}$ e $G_{ml}$}
+I sottografi $G_{web}$ e $G_{ml}$ sono \emph{indotti} dalle due classi: contengono i nodi di una sola
+classe e tutti gli archi tra di essi. Il loro confronto rivela una differenza importante.
+$G_{web}$ (\num{27961} nodi, \num{224623} archi) resta quasi interamente connesso: la componente principale
+contiene il 98,9\% dei nodi. $G_{ml}$ (\num{9739} nodi, \num{19684} archi) si frammenta invece in \num{2466}
+componenti, e la principale ne contiene solo il 72,7\%. Molti sviluppatori ML, quindi, sono collegati al resto
+della rete solo attraverso sviluppatori web: pur essendo omofili, non formano un blocco compatto ma piuttosto
+tanti piccoli gruppi.
+
+\subsection{Il nucleo della rete: k-core}
+Il \textbf{$k$-core} di un grafo è il sottografo massimale in cui ogni nodo ha almeno $k$ vicini
+\emph{all'interno del sottografo stesso}. Si ottiene eliminando ripetutamente i nodi con grado minore di $k$:
+ogni eliminazione può ridurre il grado dei vicini, che a loro volta possono dover essere eliminati, finché la
+rete non smette di cambiare. I $k$-core formano una struttura a strati, in cui ogni core è contenuto nel
+precedente (Figura~\ref{fig:kcore}).
+
+Il core più profondo della nostra rete è il 34-core: 360 nodi e \num{10488} archi, con una densità di 0,16,
+circa 400 volte quella dell'intera rete. Lo abbiamo scelto come terzo sottografo, $G_{core}$: abbastanza
+piccolo da essere disegnato (Figura~\ref{fig:G_core}) e analizzato in modo esatto. Al suo interno il cammino
+medio scende a 1,84 e il diametro a 3. È significativo che contenga solo 5 sviluppatori ML (1,4\%,
+contro il 25,8\% dell'intera rete): il nucleo più connesso di GitHub è quasi interamente formato da
+sviluppatori web.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  \draw[black!30, fill=black!3]  (0,0) circle (32mm);
+  \draw[blue!40, fill=blue!5]    (0,0) circle (21mm);
+  \draw[blue!60, fill=blue!12]   (0,0) circle (10mm);
+  \node[font=\footnotesize] at (0,26mm) {1-core: tutta la rete};
+  \node[font=\footnotesize] at (0,15mm) {2-core};
+  \node[font=\footnotesize] at (0,0) {3-core};
+  % esempio di nodi periferici
+  \node[nodo, minimum size=4mm] (p1) at (-27mm,-8mm) {};
+  \node[nodo, minimum size=4mm] (p2) at (-16mm,-6mm) {};
+  \draw[arco] (p1)--(p2);
+  \node[font=\footnotesize, align=left, anchor=west] at (36mm,0) {grado 1: eliminato al passo 1\\resta nel nucleo solo chi ha\\almeno $k$ vicini al suo interno};
+\end{tikzpicture}
+\caption{Struttura a strati dei $k$-core: ogni core è contenuto nel precedente}
+\label{fig:kcore}
+\end{figure}
+
+\figura{grafo_G_core.pdf}{Il 34-core della rete (360 nodi): sviluppatori web in blu, ML in arancione}{fig:G_core}
+
+% ------------------------------------------------------------
+\section{Sintesi}
+\label{sec:sintesi_dataset}
+L'analisi del dataset ha mostrato che:
+\begin{itemize}
+  \item i dati sono puliti e coerenti con le statistiche ufficiali: non è stata necessaria alcuna correzione;
+  \item la rete è connessa, molto sparsa e a \emph{piccolo mondo}, con un cammino medio di circa 3,3 passaggi;
+  \item la distribuzione dei gradi è a coda lunga, con pochi hub di grado elevatissimo, tutti sviluppatori web;
+  \item gli sviluppatori ML mostrano una forte omofilia, ma il loro sottografo è frammentato;
+  \item il nucleo più denso della rete (34-core) è formato quasi esclusivamente da sviluppatori web.
+\end{itemize}
+Nel Capitolo~\ref{cap:centralita} verificheremo se queste differenze si riflettono nelle misure di centralità.
+
 
 % ==================== CAPITOLO 3 - ANALISI DELLE MISURE DI CENTRALITÀ ====================
 \chapter{Analisi delle misure di centralità}
