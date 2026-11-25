@@ -352,28 +352,39 @@ La rete contiene \num{27961} sviluppatori web (74,2\%) e \num{9739} sviluppatori
 analisi successive, perché la classe web tenderà a prevalere in ogni misura aggregata.
 
 \subsection{Grado e sua distribuzione}
-Il grado medio della rete è 15,3, ma questo valore è poco rappresentativo del nodo tipico: il grado
-mediano è 6 per gli sviluppatori web e 4 per quelli di machine learning. La distribuzione dei gradi è infatti
-\emph{a coda lunga} (Figura~\ref{fig:gradi}): la grande maggioranza dei nodi ha pochi vicini, mentre un numero
+Il grado medio della rete è 15,3, ma questo valore è poco rappresentativo del nodo tipico, il grado
+mediano è 6 per gli sviluppatori web e 4 per quelli di machine learning. 
+
+
+La distribuzione dei gradi è infatti \emph{a coda lunga} (Figura~\ref{fig:gradi}), la grande maggioranza dei nodi ha pochi vicini, mentre un numero
 ridotto di \emph{hub} ne ha migliaia. I nodi con grado più alto sono tutti sviluppatori web:
 \texttt{dalinhuang99} (\num{9458} vicini, circa un quarto dell'intera rete), \texttt{nfultz} (\num{7085})
-e \texttt{addyosmani} (\num{3324}). Un numero così elevato di follow \emph{reciproci} suggerisce che alcuni di
+e \texttt{addyosmani} (\num{3324}).
+
+
+Un numero così elevato di follow \emph{reciproci} suggerisce che alcuni di
 questi account ricambino sistematicamente chi li segue (comportamento detto \emph{follow-back}); questi nodi
 sono stati mantenuti, ma ne terremo conto nell'interpretazione delle centralità.
 
-Il grafico di destra riporta la funzione di distribuzione complementare (CCDF), cioè per ogni valore $k$ la
-quota di nodi con grado almeno pari a $k$, $P(K \geq k)$. In scala logaritmica, la curva scende lentamente lungo
-più ordini di grandezza: è il segno della presenza di hub. La curva degli sviluppatori ML scende più rapidamente: hanno in generale meno
-vicini (grado medio 8,6 contro 17,7 degli sviluppatori web).
+Il grafico di destra riporta, per ogni valore $k$, la quota di sviluppatori che hanno
+almeno $k$ vicini, $P(K \geq k)$ (funzione di distribuzione complementare, CCDF).
+Entrambi gli assi sono in scala logaritmica, perché i gradi vanno da 1 a \num{9458}.
+La curva non si interrompe bruscamente vicino al grado medio, ma prosegue fino a
+valori centinaia di volte più grandi, è il segno della presenza di hub.
+La curva degli sviluppatori ML resta sotto quella degli sviluppatori web: per ogni
+soglia $k$, una quota minore di sviluppatori ML raggiunge almeno $k$ vicini
+(grado medio 8,6 contro 17,7).
 
 \figura{distribuzione_gradi.pdf}{Distribuzione dei gradi (sinistra) e CCDF del grado per classe (destra), in scala logaritmica}{fig:gradi}
 
 \subsection{Connettività e cammini}
-La rete è formata da un'unica componente connessa: ogni sviluppatore può raggiungere qualunque altro
-attraverso una catena di follow reciproci. Il calcolo esatto delle distanze richiederebbe una visita in
+La rete è formata da un'unica componente connessa, \textbf{ogni sviluppatore può raggiungere qualunque altro
+attraverso una catena di follow reciproci}. Il calcolo esatto delle distanze richiederebbe una visita in
 ampiezza (BFS) a partire da ciascuno dei \num{37700} nodi, operazione troppo costosa. Il cammino medio è stato
-quindi stimato con una BFS da 200 nodi scelti a caso, ottenendo un valore di circa 3,30; il diametro è stato
-calcolato con l'algoritmo approssimato \emph{2-sweep}, che fornisce un limite inferiore: almeno 11.
+quindi stimato con una BFS da 200 nodi scelti a caso, ottenendo un valore di circa \textbf{3,30}; il diametro è stato
+calcolato con l'algoritmo approssimato \textbf{\emph{2-sweep}}, che fornisce un limite inferiore: almeno 11.
+
+
 Due sviluppatori qualsiasi sono dunque separati in media da poco più di tre passaggi, nonostante la rete sia
 molto sparsa: è il fenomeno del \emph{piccolo mondo}, reso possibile dagli hub che fanno da ponte tra
 zone lontane della rete.
@@ -392,9 +403,11 @@ invece la rete nel suo insieme:
 \]
 dove una tripla connessa è un cammino di due archi.
 
-Nella nostra rete i due indici sono molto diversi: il clustering medio vale 0,168, la transitività solo
-0,012. La differenza è dovuta agli hub (Figura~\ref{fig:clustering}). Un nodo con migliaia di vicini genera
-milioni di triple connesse, quasi tutte aperte: nel calcolo della transitività questi nodi dominano e
+Nella nostra rete i due indici sono molto diversi, \textbf{il clustering medio vale 0,168}, \textbf{la transitività solo
+0,012}.
+
+La differenza è dovuta agli hub (Figura~\ref{fig:clustering}). Un nodo con migliaia di vicini genera
+milioni di triple connesse, quasi tutte aperte, nel calcolo della transitività questi nodi dominano e
 abbassano il valore complessivo. Nel clustering medio, invece, ogni hub conta come un solo nodo, mentre i
 numerosi nodi di grado basso, spesso inseriti in piccoli gruppi coesi, mantengono la media più alta.
 
@@ -418,18 +431,20 @@ numerosi nodi di grado basso, spesso inseriti in piccoli gruppi coesi, mantengon
     \node[font=\footnotesize, align=center] at (0,-2.4) {45 coppie di vicini, 1 collegata\\$C_{hub} = 1/45 \approx 0{,}02$};
   \end{scope}
 \end{tikzpicture}
-\caption{Coefficiente di clustering locale: un nodo con vicini tutti collegati (sinistra) e un hub con vicini quasi mai collegati (destra)}
+\caption{Coefficiente di clustering locale, un nodo con vicini tutti collegati (sinistra) e un hub con vicini quasi mai collegati (destra)}
 \label{fig:clustering}
 \end{figure}
 
 \subsection{Assortatività}
 Il coefficiente di assortatività misura la tendenza dei nodi a collegarsi a nodi simili rispetto a una
-certa caratteristica. Varia tra $-1$ e $+1$: un valore positivo indica che i nodi si collegano
+certa caratteristica. Varia tra $-1$ e $+1$, un valore positivo indica che i nodi si collegano
 preferibilmente a nodi simili, un valore vicino a zero che i collegamenti non dipendono dalla
 caratteristica, un valore negativo che si collegano preferibilmente a nodi diversi.
 
-Rispetto al grado, l'assortatività vale $-0{,}075$: la rete è leggermente \emph{disassortativa}, cioè gli hub
-tendono a essere collegati a nodi con pochi vicini più che ad altri hub. Rispetto all'etichetta \texttt{ml\_target}, invece, l'assortatività vale $0{,}378$: un valore
+\textbf{Rispetto al grado}, l'assortatività vale \textbf{$-0{,}075$}, la rete è leggermente \emph{disassortativa}, cioè gli hub
+tendono a essere collegati a nodi con pochi vicini più che ad altri hub. 
+
+\textbf{Rispetto all'etichetta \texttt{ml\_target}}, invece, l'assortatività vale \textbf{$0{,}378$}: un valore
 nettamente positivo, approfondito nella Sezione~\ref{sec:omofilia}. La Tabella~\ref{tab:metriche_grafi}
 riassume tutte le metriche, per $G$ e per i sottografi descritti nella Sezione~\ref{sec:sottografi}.
 
@@ -444,7 +459,18 @@ confrontati con il numero atteso se ogni nodo mantenesse il proprio grado ma sce
 tener conto della classe. Il rapporto tra archi osservati e attesi vale 1 in assenza di preferenze, è
 maggiore di 1 se un tipo di legame è più frequente del caso, minore di 1 se è più raro.
 
-I risultati (Tabella~\ref{tab:omofilia}) mostrano un'omofilia marcata: gli archi tra sviluppatori ML sono
+In pratica, ogni arco ha due estremità: l'85,5\% delle estremità appartiene a
+sviluppatori web e il 14,5\% a sviluppatori ML.
+
+Se gli archi collegassero estremità
+scelte a caso, un arco sarebbe ML--ML con probabilità $0{,}145^2$, web--web con
+probabilità $0{,}855^2$ e web--ML con probabilità $2 \times 0{,}855 \times 0{,}145$;
+moltiplicando per il numero di archi si ottengono i valori attesi della
+Tabella~\ref{tab:omofilia}. Si usano le estremità e non i nodi perché gli
+sviluppatori ML hanno in media meno vicini, pur essendo il 25,8\% dei nodi,
+possiedono solo il 14,5\% delle estremità degli archi.
+
+I risultati (Tabella~\ref{tab:omofilia}) mostrano un'omofilia marcata, gli archi tra sviluppatori ML sono
 3,22 volte più numerosi del previsto, mentre quelli tra web e ML sono solo 0,62 volte il valore atteso.
 Gli archi web--web sono sostanzialmente in linea con il caso (1,06), perché la classe web è maggioritaria.
 In altre parole, gli sviluppatori di machine learning formano un gruppo che si segue prevalentemente al
@@ -460,27 +486,39 @@ dei capitoli successivi, come la betweenness esatta o l'enumerazione delle cliqu
 costose sull'intero grafo. Abbiamo quindi estratto alcuni sottografi, che verranno analizzati accanto a $G$.
 
 \subsection{Sottografi per classe: $G_{web}$ e $G_{ml}$}
-I sottografi $G_{web}$ e $G_{ml}$ sono \emph{indotti} dalle due classi: contengono i nodi di una sola
+I sottografi $G_{web}$ e $G_{ml}$ sono \emph{indotti} dalle due classi, contengono i nodi di una sola
 classe e tutti gli archi tra di essi. Il loro confronto rivela una differenza importante.
+
+
 $G_{web}$ (\num{27961} nodi, \num{224623} archi) resta quasi interamente connesso: la componente principale
-contiene il 98,9\% dei nodi. $G_{ml}$ (\num{9739} nodi, \num{19684} archi) si frammenta invece in \num{2466}
+contiene il 98,9\% dei nodi. 
+
+$G_{ml}$ (\num{9739} nodi, \num{19684} archi) si frammenta invece in \num{2466}
 componenti, e la principale ne contiene solo il 72,7\%. Molti sviluppatori ML, quindi, sono collegati al resto
-della rete solo attraverso sviluppatori web: pur essendo omofili, non formano un blocco compatto ma piuttosto
-tanti piccoli gruppi.
+della rete solo attraverso sviluppatori web: \textbf{pur essendo omofili, non formano un blocco compatto ma piuttosto
+tanti piccoli gruppi}.
 
 \subsection{Il nucleo della rete: k-core}
-Il \textbf{$k$-core} di un grafo è il sottografo massimale in cui ogni nodo ha almeno $k$ vicini
-\emph{all'interno del sottografo stesso}. Si ottiene eliminando ripetutamente i nodi con grado minore di $k$:
+Il \textbf{$k$-core} di un grafo è il sottografo massimale in cui \textbf{ogni nodo ha almeno $k$ vicini
+\emph{all'interno del sottografo stesso}}. Si ottiene eliminando ripetutamente i nodi con grado minore di $k$,
 ogni eliminazione può ridurre il grado dei vicini, che a loro volta possono dover essere eliminati, finché la
 rete non smette di cambiare. I $k$-core formano una struttura a strati, in cui ogni core è contenuto nel
 precedente (Figura~\ref{fig:kcore}).
 
-Il core più profondo della nostra rete è il 34-core: 360 nodi e \num{10488} archi, con una densità di 0,16,
-circa 400 volte quella dell'intera rete. Lo abbiamo scelto come terzo sottografo, $G_{core}$: abbastanza
+\paragraph{}
+\begin{lstlisting}[language=Python, caption={Calcolo del core number e del $k$-core massimo}, label={lst:kcore}]
+core_num = nx.core_number(G)       # core number di ciascuno dei 37.700 sviluppatori
+k_max = max(core_num.values())     # valore massimo: 34
+G_core = nx.k_core(G, k=k_max)     # sottografo 34-core: 360 nodi
+\end{lstlisting}
+
+
+Il core più profondo della nostra rete è il \textbf{34-core}, 360 nodi e \num{10488} archi, con una densità di 0,16,
+circa 400 volte quella dell'intera rete. Lo abbiamo scelto come terzo sottografo, $G_{core}$, abbastanza
 piccolo da essere disegnato (Figura~\ref{fig:G_core}) e analizzato in modo esatto. Al suo interno il cammino
 medio scende a 1,84 e il diametro a 3. È significativo che contenga solo 5 sviluppatori ML (1,4\%,
-contro il 25,8\% dell'intera rete): il nucleo più connesso di GitHub è quasi interamente formato da
-sviluppatori web.
+contro il 25,8\% dell'intera rete): \textbf{il nucleo più connesso di GitHub è quasi interamente formato da
+sviluppatori web}.
 
 \begin{figure}[H]
 \centering
