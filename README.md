@@ -1,4 +1,4 @@
-﻿# 📊 Data Science – Progetti
+﻿#  Data Science – Progetti
 
 ![anno](https://img.shields.io/badge/A.A.-2026--2027-lightgrey?style=flat)
 ![linguaggio](https://img.shields.io/badge/-Python%203.12-blue?style=flat&logo=python&logoColor=white)
@@ -21,15 +21,15 @@ Raccolta dei progetti del corso di **Data Science**, Laurea Magistrale in Ingegn
 **Docente:** Prof. Domenico Ursino  
 **Dottorando:** Christopher Buratti
 
-## 📁 Progetti
+##  Progetti
 
 | # | Cartella | Argomento | Stato |
 |---|---|---|---|
-| 1️⃣ | [`1_GLOBAL_ANALYSIS/`](1_GLOBAL_ANALYSIS/) | Qualità dell'aria in Campania: analisi descrittiva, classificazione, clustering e forecasting | ✅ completato |
-| 2️⃣ | [`2_SOCIAL_NETWORK_ANALYSIS/`](2_SOCIAL_NETWORK_ANALYSIS/) | Social Network Analysis della rete degli sviluppatori GitHub: centralità, comunità, link prediction | 🚧 in corso |
-| 3️⃣ | [`3_CHATBOT/`](3_CHATBOT/) | Chatbot | 🚧 in corso |
+| 1️ | [`1_GLOBAL_ANALYSIS/`](1_GLOBAL_ANALYSIS/) | Qualità dell'aria in Campania: analisi descrittiva, classificazione, clustering e forecasting | ✅ completato |
+| 2️ | [`2_SOCIAL_NETWORK_ANALYSIS/`](2_SOCIAL_NETWORK_ANALYSIS/) | Social Network Analysis della rete degli sviluppatori GitHub: centralità, comunità, link prediction | 🚧 in corso |
+| 3️ | [`3_CHATBOT/`](3_CHATBOT/) | Chatbot | 🚧 in corso |
 
-## 🗂️ Organizzazione di un progetto
+##  Organizzazione di un progetto
 
 Tutti i progetti seguono la stessa struttura: i dati, una cartella numerata per ogni fase dell'analisi
 e la relazione finale.
@@ -66,7 +66,7 @@ pip install -r requirements.txt
 jupyter notebook
 ```
 
-## 📜 Licenza <a name="license"></a>
+##  Licenza <a name="license"></a>
 
 [![CC BY-NC-SA 4.0][cc-by-nc-sa-shield]][cc-by-nc-sa]
 
